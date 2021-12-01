@@ -86,8 +86,8 @@ async def main():
     NODE_URL = 'http://127.0.0.1:35997'
 
     # Data store directory
-    cwd = os.getcwd()
-    DATA_STORE_DIR = 'data_store/'.format(cwd)
+    path = os.path.dirname(os.path.abspath(__file__))
+    DATA_STORE_DIR = f'{path}/data_store'
 
     # Create data store
     if not os.path.exists(DATA_STORE_DIR):
