@@ -82,11 +82,13 @@ def write_pillar_data_to_file(data, file_name):
 
 async def main():
 
-    # Node URL that has HTTP enabled
-    NODE_URL = 'http://127.0.0.1:35997'
+    # Get file path
+    path = os.path.dirname(os.path.abspath(__file__))
+
+    # Read config
+    cfg = read_file(f'{path}/config/config.json')
 
     # Data store directory
-    path = os.path.dirname(os.path.abspath(__file__))
     DATA_STORE_DIR = f'{path}/data_store'
 
     # Create data store
@@ -115,7 +117,7 @@ async def main():
 
     # Update NoM data
     nom_data = NomData()
-    await nom_data.update(node_url=NODE_URL, znn_price_usd=znn_price, qsr_price_usd=qsr_price)
+    await nom_data.update(node_url=cfg['node_url_http'], znn_price_usd=znn_price, qsr_price_usd=qsr_price)
 
     # Write NoM data to file
     write_nom_data_to_file(

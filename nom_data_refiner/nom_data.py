@@ -385,6 +385,7 @@ class NomData(dict):
             elif pillar_count_not_top_30 > 0:
 
                 # Use a reward multiplier based on produced / expected momentums
+                # TODO: Needs a better implementation as the multiplier will effect the rewards too much at the start of an epoch
                 momentum_reward_multiplier = p_data['currentStats']['producedMomentums'] / \
                     p_data['currentStats']['expectedMomentums'] if p_data['currentStats']['expectedMomentums'] > 0 else 0
 
@@ -449,7 +450,7 @@ class NomData(dict):
     def __get_single_pillar_delegate_apr(self, yearly_momentum_rewards, yearly_delegate_rewards, momentum_reward_sharing, delegate_reward_sharing, delegated_znn):
         rewards_value_znn = yearly_momentum_rewards * momentum_reward_sharing + \
             yearly_delegate_rewards * delegate_reward_sharing
-        return rewards_value_znn / delegated_znn if rewards_value_znn > 0 else 0
+        return rewards_value_znn / delegated_znn if delegated_znn > 0 else 0
 
     def __get_yearly_momentum_rewards_top_30(self):
         total_yearly_momentum_rewards = self.__get_current_yearly_znn_rewards() * \
