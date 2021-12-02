@@ -389,12 +389,18 @@ class NomData(object):
             pillar_count_top_30 = self.__get_pillar_count_top_30()
             pillar_count_not_top_30 = self.__get_pillar_count_not_top_30()
 
-            # Calculate yearly momentum rewards for Pillar based on currently produced momentums
-            if p_data['rank'] < 30 and pillar_count_top_30 > 0:
+            produced = p_data['currentStats']['producedMomentums']
+            expected = p_data['currentStats']['expectedMomentums']
 
-                # Use a reward multiplier based on produced / expected momentums
-                momentum_reward_multiplier = p_data['currentStats']['producedMomentums'] / \
-                    p_data['currentStats']['expectedMomentums']
+            # Use a reward multiplier based on produced / expected momentums. Allow a tolerance of 2 momentums.
+            # TODO: Some better implementation could be used.
+            if expected - produced > 2 and expected > 0:
+                momentum_reward_multiplier = produced / expected
+            else:
+                momentum_reward_multiplier = 1
+
+            # Calculate yearly momentum rewards for Pillar based on currently produced momentums
+            if p_data['rank'] < 30 and pillar_count_top_30 > 0:    
 
                 # Assume the expected momentums even out for all Pillars -> use a produced momentums average
                 avg_produced_momentums = self.pillars_produced_momentums_top_30 / pillar_count_top_30
@@ -405,11 +411,6 @@ class NomData(object):
 
             # Same for not top 30 Pillars
             elif pillar_count_not_top_30 > 0:
-
-                # Use a reward multiplier based on produced / expected momentums
-                # TODO: Needs a better implementation as the multiplier will affect the rewards too much at the start of an epoch
-                momentum_reward_multiplier = p_data['currentStats']['producedMomentums'] / \
-                    p_data['currentStats']['expectedMomentums'] if p_data['currentStats']['expectedMomentums'] > 0 else 0
 
                 # Assume the expected momentums even out for all Pillars -> use a produced momentums average
                 avg_produced_momentums = self.pillars_produced_momentums_not_top_30 / \
