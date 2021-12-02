@@ -44,6 +44,11 @@ def write_nom_data_to_file(data, file_name):
         'sentinelApr': data.sentinel_apr,
         'pillarAprTop30': data.pillar_apr_top_30,
         'pllarAprNotTop30': data.pillar_apr_not_top_30,
+        'currentYearlyZnnRewardPoolForLps': data.current_yearly_znn_reward_pool_for_lps,
+        'currentYearlyZnnRewardPoolForSentinels': data.current_yearly_znn_reward_pool_for_sentinels,
+        'currentYearlyQsrRewardPoolForStakers': data.current_yearly_qsr_reward_pool_for_stakers,
+        'currentYearlyQsrRewardPoolForLps': data.current_yearly_qsr_reward_pool_for_lps,
+        'currentYearlyQsrRewardPoolForSentinels': data.current_yearly_qsr_reward_pool_for_sentinels,
     }
 
     # Dump data to file

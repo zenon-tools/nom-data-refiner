@@ -108,6 +108,13 @@ class NomData(object):
     pillar_data_cache = {}
     pillars = []
 
+    current_yearly_znn_reward_pool_for_lps = 0
+    current_yearly_znn_reward_pool_for_sentinels = 0
+
+    current_yearly_qsr_reward_pool_for_stakers = 0
+    current_yearly_qsr_reward_pool_for_lps = 0
+    current_yearly_qsr_reward_pool_for_sentinels = 0
+
     async def update(self, node_url, znn_price_usd, qsr_price_usd):
         self.node_url = node_url
         self.znn_price_usd = znn_price_usd
@@ -121,6 +128,9 @@ class NomData(object):
             self.__update_qsr_supply(),
             self.__update_sentinel_data(),
             self.__update_pillar_data())
+
+        # Update the yearly reward pools based on current reward emissions rate
+        self.__update_current_yearly_reward_pools()
 
         # Update APRs (LP and staking not implemented yet)
         self.__update_sentinel_apr()
@@ -286,6 +296,22 @@ class NomData(object):
         except KeyError:
             print('Error: __update_pillar_data')
 
+    def __update_current_yearly_reward_pools(self):
+        total_yearly_znn_rewards = self.__get_current_yearly_znn_rewards()
+        total_yearly_qsr_rewards = self.__get_current_yearly_qsr_rewards()
+
+        self.current_yearly_znn_reward_pool_for_lps = total_yearly_znn_rewards * \
+            self.ZNN_REWARD_SHARE_FOR_LPS
+        self.current_yearly_znn_reward_pool_for_sentinels = total_yearly_znn_rewards * \
+            self.ZNN_REWARD_SHARE_FOR_SENTINELS
+
+        self.current_yearly_qsr_reward_pool_for_stakers = total_yearly_qsr_rewards * \
+            self.QSR_REWARD_SHARE_FOR_STAKERS
+        self.current_yearly_qsr_reward_pool_for_lps = total_yearly_qsr_rewards * \
+            self.QSR_REWARD_SHARE_FOR_LPS
+        self.current_yearly_qsr_reward_pool_for_sentinels = total_yearly_qsr_rewards * \
+            self.QSR_REWARD_SHARE_FOR_SENTINELS
+
     def __update_delegate_apr(self):
         total_apr = 0
         sharing_pillars_count = 0
@@ -298,12 +324,8 @@ class NomData(object):
             sharing_pillars_count if sharing_pillars_count > 0 else 0
 
     def __update_sentinel_apr(self):
-        yearly_znn_rewards = self.__get_current_yearly_znn_rewards() * \
-            self.ZNN_REWARD_SHARE_FOR_SENTINELS
-        yearly_qsr_rewards = self.__get_current_yearly_qsr_rewards() * \
-            self.QSR_REWARD_SHARE_FOR_SENTINELS
-        total_rewards_usd = yearly_znn_rewards * self.znn_price_usd + \
-            yearly_qsr_rewards * self.qsr_price_usd
+        total_rewards_usd = self.current_yearly_znn_reward_pool_for_sentinels * self.znn_price_usd + \
+            self.current_yearly_qsr_reward_pool_for_sentinels * self.qsr_price_usd
         if self.sentinel_count > 0 and self.sentinel_value_usd > 0:
             self.sentinel_apr = total_rewards_usd / \
                 self.sentinel_count / self.sentinel_value_usd * 100
@@ -385,7 +407,7 @@ class NomData(object):
             elif pillar_count_not_top_30 > 0:
 
                 # Use a reward multiplier based on produced / expected momentums
-                # TODO: Needs a better implementation as the multiplier will effect the rewards too much at the start of an epoch
+                # TODO: Needs a better implementation as the multiplier will affect the rewards too much at the start of an epoch
                 momentum_reward_multiplier = p_data['currentStats']['producedMomentums'] / \
                     p_data['currentStats']['expectedMomentums'] if p_data['currentStats']['expectedMomentums'] > 0 else 0
 
