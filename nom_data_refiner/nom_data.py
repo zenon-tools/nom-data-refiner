@@ -38,7 +38,7 @@ class NomPillar(object):
         self.delegate_apr = delegate_apr
 
 
-class NomData(dict):
+class NomData(object):
 
     # Constants
     DAYS_PER_MONTH = 30
