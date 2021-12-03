@@ -63,13 +63,13 @@ def write_pillar_data_to_file(data, file_name):
         json_data[pillar.owner_address] = {
             'name': pillar.name,
             'rank': pillar.rank,
-            'type': pillar.type,
-            'ownerAddress': pillar.owner_address,
-            'producerAddress': pillar.producer_address,
-            'withdrawAddress': pillar.withdraw_address,
-            'isRevocable': pillar.is_revocable,
-            'revokeCooldown': pillar.revoke_cooldown,
-            'revokeTimestamp': pillar.revoke_timestamp,
+            #'type': pillar.type,
+            #'ownerAddress': pillar.owner_address,
+            #'producerAddress': pillar.producer_address,
+            #'withdrawAddress': pillar.withdraw_address,
+            #'isRevocable': pillar.is_revocable,
+            #'revokeCooldown': pillar.revoke_cooldown,
+            #'revokeTimestamp': pillar.revoke_timestamp,
             'giveMomentumRewardPercentage': pillar.give_momentum_reward_percentage,
             'giveDelegateRewardPercentage': pillar.give_delegate_reward_percentage,
             'producedMomentums': pillar.produced_momentums,
@@ -77,8 +77,8 @@ def write_pillar_data_to_file(data, file_name):
             'weight': pillar.weight,
             'apr': pillar.apr,
             'delegateApr': pillar.delegate_apr,
-            'timestamp': math.trunc(time.time()),
-            'momentumHeight': data.momentum_height
+            #'timestamp': math.trunc(time.time()),
+            #'momentumHeight': data.momentum_height
         }
 
     # Dump data to file
