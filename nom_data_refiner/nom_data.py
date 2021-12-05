@@ -65,8 +65,7 @@ class NomData(object):
     MOMENTUMS_PER_HOUR = 360
     ZNN_ZTS_ID = 'zts1znnxxxxxxxxxxxxx9z4ulx'
     QSR_ZTS_ID = 'zts1qsrxxxxxxxxxxxxxmrhjll'
-    TOTAL_EXPECTED_DAILY_MOMENTUMS_TOP_30 = 5070
-    TOTAL_EXPECTED_DAILY_MOMENTUMS_NOT_TOP_30 = 3500
+    TOTAL_MOMENTUMS_PER_DAY = 8640
 
     # Daily reward emissions
     DAILY_ZNN_REWARDS_BY_MONTH = [
@@ -80,6 +79,9 @@ class NomData(object):
     momentum_height = 0
     node_version = ''
     momentum_month = 0
+
+    total_expected_daily_momentums_top_30 = 0
+    total_expected_daily_momentums_not_top_30 = 0
 
     # Total staked amount will have to be indexed separately
     total_staked_znn = {
@@ -136,6 +138,9 @@ class NomData(object):
             self.__update_qsr_supply(),
             self.__update_sentinel_data(),
             self.__update_pillar_data())
+
+        # Update expected momentums for top 30 Pillars and for non top 30 Pillars
+        self.__update_total_expected_momentums_for_pillars()
 
         # Update the yearly reward pools based on current reward emissions rate
         self.__update_current_yearly_reward_pools()
@@ -294,6 +299,19 @@ class NomData(object):
         except KeyError:
             print('Error: __update_pillar_data')
 
+    def __update_total_expected_momentums_for_pillars(self):
+        # Group B size (includes half of the top 30 pillars and all non top 30 pillars)
+        group_b_size = self.pillar_count - 15
+
+        # Momentum allocations for group A (15 Pillars from top 30) and group B (all the remaining Pillars not in group A)
+        momentums_allocated_for_group_a = self.TOTAL_MOMENTUMS_PER_DAY * 0.5
+        momentums_allocated_for_group_b = self.TOTAL_MOMENTUMS_PER_DAY * 0.5
+
+        self.total_expected_daily_momentums_top_30 = momentums_allocated_for_group_a + \
+            momentums_allocated_for_group_b * (15 / group_b_size)
+        self.total_expected_daily_momentums_not_top_30 = momentums_allocated_for_group_b * \
+            ((group_b_size - 15) / group_b_size)
+
     def __update_current_yearly_reward_pools(self):
         total_yearly_znn_rewards = self.__get_current_yearly_znn_rewards()
         total_yearly_qsr_rewards = self.__get_current_yearly_qsr_rewards()
@@ -305,7 +323,8 @@ class NomData(object):
 
         self.yearly_znn_momentum_reward_pool_for_pillars_top_30 = self.__get_yearly_momentum_rewards_top_30()
         self.yearly_znn_momentum_reward_pool_for_pillars_not_top_30 = self.__get_yearly_momentum_rewards_not_top_30()
-        self.yearly_znn_delegate_reward_pool_for_pillars = total_yearly_znn_rewards * self.ZNN_REWARD_SHARE_FOR_PILLAR_DELEGATES
+        self.yearly_znn_delegate_reward_pool_for_pillars = total_yearly_znn_rewards * \
+            self.ZNN_REWARD_SHARE_FOR_PILLAR_DELEGATES
 
         self.yearly_qsr_reward_pool_for_stakers = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_STAKERS
@@ -402,24 +421,26 @@ class NomData(object):
                 momentum_reward_multiplier = 1
 
             # Calculate yearly momentum rewards for Pillar based on currently produced momentums
-            if p_data['rank'] < 30 and pillar_count_top_30 > 0:    
+            if p_data['rank'] < 30 and pillar_count_top_30 > 0:
 
                 # Calculate the daily expected momentums for a top 30 Pillar
-                daily_expected_momentums_per_pillar = self.TOTAL_EXPECTED_DAILY_MOMENTUMS_TOP_30 / pillar_count_top_30
+                daily_expected_momentums_per_pillar = self.total_expected_daily_momentums_top_30 / \
+                    pillar_count_top_30
 
                 # Calculate the Pillar's yearly momentum rewards based on current stats
                 yearly_momentum_rewards = self.__get_yearly_momentum_rewards_top_30(
-                ) * ((daily_expected_momentums_per_pillar * momentum_reward_multiplier) / self.TOTAL_EXPECTED_DAILY_MOMENTUMS_TOP_30)
+                ) * ((daily_expected_momentums_per_pillar * momentum_reward_multiplier) / self.total_expected_daily_momentums_top_30)
 
             # Same for not top 30 Pillars
             elif pillar_count_not_top_30 > 0:
 
                 # Calculate the daily expected momentums for a non top 30 Pillar
-                daily_expected_momentums_per_pillar = self.TOTAL_EXPECTED_DAILY_MOMENTUMS_NOT_TOP_30 / pillar_count_not_top_30
+                daily_expected_momentums_per_pillar = self.total_expected_daily_momentums_not_top_30 / \
+                    pillar_count_not_top_30
 
                 # Calculate the Pillar's yearly momentum rewards based on current stats
                 yearly_momentum_rewards = self.__get_yearly_momentum_rewards_not_top_30(
-                ) * ((daily_expected_momentums_per_pillar * momentum_reward_multiplier) / self.TOTAL_EXPECTED_DAILY_MOMENTUMS_NOT_TOP_30)
+                ) * ((daily_expected_momentums_per_pillar * momentum_reward_multiplier) / self.total_expected_daily_momentums_not_top_30)
 
             else:
                 yearly_momentum_rewards = 0
@@ -445,8 +466,10 @@ class NomData(object):
                 yearly_momentum_rewards, yearly_delegate_rewards, momentum_reward_sharing, delegate_reward_sharing, delegated_znn)
 
             # Get rewards for current epoch
-            epoch_momentum_rewards = yearly_momentum_rewards / self.DAYS_PER_YEAR * self.EPOCH_LENGTH_IN_DAYS    
-            epoch_delegate_rewards = yearly_delegate_rewards / self.DAYS_PER_YEAR * self.EPOCH_LENGTH_IN_DAYS    
+            epoch_momentum_rewards = yearly_momentum_rewards / \
+                self.DAYS_PER_YEAR * self.EPOCH_LENGTH_IN_DAYS
+            epoch_delegate_rewards = yearly_delegate_rewards / \
+                self.DAYS_PER_YEAR * self.EPOCH_LENGTH_IN_DAYS
 
             # Create Pillar object
             self.pillars.append(
@@ -485,17 +508,13 @@ class NomData(object):
     def __get_yearly_momentum_rewards_top_30(self):
         total_yearly_momentum_rewards = self.__get_current_yearly_znn_rewards() * \
             self.ZNN_REWARD_SHARE_FOR_PILLAR_MOMENTUMS
-        total_expected_daily_momentums = self.TOTAL_EXPECTED_DAILY_MOMENTUMS_TOP_30 + \
-            self.TOTAL_EXPECTED_DAILY_MOMENTUMS_NOT_TOP_30
-        momentum_rewards_share = self.TOTAL_EXPECTED_DAILY_MOMENTUMS_TOP_30 / \
-            total_expected_daily_momentums if total_expected_daily_momentums > 0 else 0
+        momentum_rewards_share = self.total_expected_daily_momentums_top_30 / \
+            self.TOTAL_MOMENTUMS_PER_DAY
         return total_yearly_momentum_rewards * momentum_rewards_share
 
     def __get_yearly_momentum_rewards_not_top_30(self):
         total_yearly_momentum_rewards = self.__get_current_yearly_znn_rewards() * \
             self.ZNN_REWARD_SHARE_FOR_PILLAR_MOMENTUMS
-        total_expected_daily_momentums = self.TOTAL_EXPECTED_DAILY_MOMENTUMS_TOP_30 + \
-            self.TOTAL_EXPECTED_DAILY_MOMENTUMS_NOT_TOP_30
-        momentum_rewards_share = self.TOTAL_EXPECTED_DAILY_MOMENTUMS_NOT_TOP_30 / \
-            total_expected_daily_momentums if total_expected_daily_momentums > 0 else 0
+        momentum_rewards_share = self.total_expected_daily_momentums_not_top_30 / \
+            self.TOTAL_MOMENTUMS_PER_DAY
         return total_yearly_momentum_rewards * momentum_rewards_share
