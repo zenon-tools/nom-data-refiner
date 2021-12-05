@@ -44,11 +44,14 @@ def write_nom_data_to_file(data, file_name):
         'sentinelApr': data.sentinel_apr,
         'pillarAprTop30': data.pillar_apr_top_30,
         'pillarAprNotTop30': data.pillar_apr_not_top_30,
-        'currentYearlyZnnRewardPoolForLps': data.current_yearly_znn_reward_pool_for_lps,
-        'currentYearlyZnnRewardPoolForSentinels': data.current_yearly_znn_reward_pool_for_sentinels,
-        'currentYearlyQsrRewardPoolForStakers': data.current_yearly_qsr_reward_pool_for_stakers,
-        'currentYearlyQsrRewardPoolForLps': data.current_yearly_qsr_reward_pool_for_lps,
-        'currentYearlyQsrRewardPoolForSentinels': data.current_yearly_qsr_reward_pool_for_sentinels,
+        'yearlyZnnRewardPoolForLps': data.yearly_znn_reward_pool_for_lps,
+        'yearlyZnnRewardPoolForSentinels': data.yearly_znn_reward_pool_for_sentinels,
+        'yearlyQsrRewardPoolForStakers': data.yearly_qsr_reward_pool_for_stakers,
+        'yearlyQsrRewardPoolForLps': data.yearly_qsr_reward_pool_for_lps,
+        'yearlyQsrRewardPoolForSentinels': data.yearly_qsr_reward_pool_for_sentinels,
+        'yearlyZnnMomentumRewardPoolForPillarsTop30': data.yearly_znn_momentum_reward_pool_for_pillars_top_30,
+        'yearlyZnnMomentumRewardPoolForPillarsNotTop30': data.yearly_znn_momentum_reward_pool_for_pillars_not_top_30,
+        'yearlyZnnDelegateRewardPoolForPillars': data.yearly_znn_delegate_reward_pool_for_pillars,
     }
 
     # Dump data to file
@@ -63,22 +66,24 @@ def write_pillar_data_to_file(data, file_name):
         json_data[pillar.owner_address] = {
             'name': pillar.name,
             'rank': pillar.rank,
-            #'type': pillar.type,
-            #'ownerAddress': pillar.owner_address,
-            #'producerAddress': pillar.producer_address,
-            #'withdrawAddress': pillar.withdraw_address,
-            #'isRevocable': pillar.is_revocable,
-            #'revokeCooldown': pillar.revoke_cooldown,
-            #'revokeTimestamp': pillar.revoke_timestamp,
+            # 'type': pillar.type,
+            # 'ownerAddress': pillar.owner_address,
+            # 'producerAddress': pillar.producer_address,
+            # 'withdrawAddress': pillar.withdraw_address,
+            # 'isRevocable': pillar.is_revocable,
+            # 'revokeCooldown': pillar.revoke_cooldown,
+            # 'revokeTimestamp': pillar.revoke_timestamp,
             'giveMomentumRewardPercentage': pillar.give_momentum_reward_percentage,
             'giveDelegateRewardPercentage': pillar.give_delegate_reward_percentage,
             'producedMomentums': pillar.produced_momentums,
             'expectedMomentums': pillar.expected_momentums,
             'weight': pillar.weight,
+            'epochMomentumRewards': pillar.epoch_momentum_rewards,
+            'epochDelegateRewards': pillar.epoch_delegate_rewards,
             'apr': pillar.apr,
             'delegateApr': pillar.delegate_apr,
-            #'timestamp': math.trunc(time.time()),
-            #'momentumHeight': data.momentum_height
+            # 'timestamp': math.trunc(time.time()),
+            # 'momentumHeight': data.momentum_height
         }
 
     # Dump data to file

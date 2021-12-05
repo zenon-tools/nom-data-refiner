@@ -18,6 +18,8 @@ class NomPillar(object):
                  produced_momentums,
                  expected_momentums,
                  weight,
+                 epoch_momentum_rewards,
+                 epoch_delegate_rewards,
                  apr,
                  delegate_apr):
         self.name = name
@@ -34,6 +36,8 @@ class NomPillar(object):
         self.produced_momentums = produced_momentums
         self.expected_momentums = expected_momentums
         self.weight = weight
+        self.epoch_momentum_rewards = epoch_momentum_rewards
+        self.epoch_delegate_rewards = epoch_delegate_rewards
         self.apr = apr
         self.delegate_apr = delegate_apr
 
@@ -44,6 +48,8 @@ class NomData(object):
     DAYS_PER_MONTH = 30
     HOURS_PER_MONTH = 24 * 30
     MONTHS_PER_YEAR = 12
+    DAYS_PER_YEAR = 12 * 30
+    EPOCH_LENGTH_IN_DAYS = 1
     QSR_REWARD_SHARE_FOR_STAKERS = 0.5
     QSR_REWARD_SHARE_FOR_SENTINELS = 0.25
     ZNN_REWARD_SHARE_FOR_SENTINELS = 0.13
@@ -107,12 +113,15 @@ class NomData(object):
     pillar_data_cache = {}
     pillars = []
 
-    current_yearly_znn_reward_pool_for_lps = 0
-    current_yearly_znn_reward_pool_for_sentinels = 0
+    yearly_znn_reward_pool_for_lps = 0
+    yearly_znn_reward_pool_for_sentinels = 0
+    yearly_znn_momentum_reward_pool_for_pillars_top_30 = 0
+    yearly_znn_momentum_reward_pool_for_pillars_not_top_30 = 0
+    yearly_znn_delegate_reward_pool_for_pillars = 0
 
-    current_yearly_qsr_reward_pool_for_stakers = 0
-    current_yearly_qsr_reward_pool_for_lps = 0
-    current_yearly_qsr_reward_pool_for_sentinels = 0
+    yearly_qsr_reward_pool_for_stakers = 0
+    yearly_qsr_reward_pool_for_lps = 0
+    yearly_qsr_reward_pool_for_sentinels = 0
 
     async def update(self, node_url, znn_price_usd, qsr_price_usd):
         self.node_url = node_url
@@ -289,16 +298,20 @@ class NomData(object):
         total_yearly_znn_rewards = self.__get_current_yearly_znn_rewards()
         total_yearly_qsr_rewards = self.__get_current_yearly_qsr_rewards()
 
-        self.current_yearly_znn_reward_pool_for_lps = total_yearly_znn_rewards * \
+        self.yearly_znn_reward_pool_for_lps = total_yearly_znn_rewards * \
             self.ZNN_REWARD_SHARE_FOR_LPS
-        self.current_yearly_znn_reward_pool_for_sentinels = total_yearly_znn_rewards * \
+        self.yearly_znn_reward_pool_for_sentinels = total_yearly_znn_rewards * \
             self.ZNN_REWARD_SHARE_FOR_SENTINELS
 
-        self.current_yearly_qsr_reward_pool_for_stakers = total_yearly_qsr_rewards * \
+        self.yearly_znn_momentum_reward_pool_for_pillars_top_30 = self.__get_yearly_momentum_rewards_top_30()
+        self.yearly_znn_momentum_reward_pool_for_pillars_not_top_30 = self.__get_yearly_momentum_rewards_not_top_30()
+        self.yearly_znn_delegate_reward_pool_for_pillars = total_yearly_znn_rewards * self.ZNN_REWARD_SHARE_FOR_PILLAR_DELEGATES
+
+        self.yearly_qsr_reward_pool_for_stakers = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_STAKERS
-        self.current_yearly_qsr_reward_pool_for_lps = total_yearly_qsr_rewards * \
+        self.yearly_qsr_reward_pool_for_lps = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_LPS
-        self.current_yearly_qsr_reward_pool_for_sentinels = total_yearly_qsr_rewards * \
+        self.yearly_qsr_reward_pool_for_sentinels = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_SENTINELS
 
     def __update_delegate_apr(self):
@@ -313,8 +326,8 @@ class NomData(object):
             sharing_pillars_count if sharing_pillars_count > 0 else 0
 
     def __update_sentinel_apr(self):
-        total_rewards_usd = self.current_yearly_znn_reward_pool_for_sentinels * self.znn_price_usd + \
-            self.current_yearly_qsr_reward_pool_for_sentinels * self.qsr_price_usd
+        total_rewards_usd = self.yearly_znn_reward_pool_for_sentinels * self.znn_price_usd + \
+            self.yearly_qsr_reward_pool_for_sentinels * self.qsr_price_usd
         if self.sentinel_count > 0 and self.sentinel_value_usd > 0:
             self.sentinel_apr = total_rewards_usd / \
                 self.sentinel_count / self.sentinel_value_usd * 100
@@ -431,6 +444,10 @@ class NomData(object):
             d_apr = self.__get_single_pillar_delegate_apr(
                 yearly_momentum_rewards, yearly_delegate_rewards, momentum_reward_sharing, delegate_reward_sharing, delegated_znn)
 
+            # Get rewards for current epoch
+            epoch_momentum_rewards = yearly_momentum_rewards / self.DAYS_PER_YEAR * self.EPOCH_LENGTH_IN_DAYS    
+            epoch_delegate_rewards = yearly_delegate_rewards / self.DAYS_PER_YEAR * self.EPOCH_LENGTH_IN_DAYS    
+
             # Create Pillar object
             self.pillars.append(
                 NomPillar(
@@ -448,6 +465,8 @@ class NomData(object):
                     p_data['currentStats']['producedMomentums'],
                     p_data['currentStats']['expectedMomentums'],
                     p_data['weight'],
+                    epoch_momentum_rewards,
+                    epoch_delegate_rewards,
                     p_apr * 100,
                     d_apr * 100))
 
