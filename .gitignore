@@ -128,5 +128,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Ignore config file
+nom_data_refiner/**/config.json
+
 # Data store
 data_store/
