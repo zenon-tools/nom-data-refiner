@@ -66,6 +66,7 @@ class NomData(object):
     ZNN_ZTS_ID = 'zts1znnxxxxxxxxxxxxx9z4ulx'
     QSR_ZTS_ID = 'zts1qsrxxxxxxxxxxxxxmrhjll'
     TOTAL_MOMENTUMS_PER_DAY = 8640
+    STAKING_CONTRACT_ADDRESS = 'z1qxemdeddedxstakexxxxxxxxxxxxxxxxjv8v62'
 
     # Daily reward emissions
     DAILY_ZNN_REWARDS_BY_MONTH = [
@@ -76,6 +77,14 @@ class NomData(object):
         5000
     ]
 
+    # A reference staking address is used to calculate the network's total weighted stake.
+    # It's assumed that the reference address is staking with a lockup period of 12 months.
+    reference_staking_address = ''
+    reference_staking_reward_previous_epoch = 0
+    reference_staking_amount = 0
+    reference_weighted_staking_amount = 0
+    avg_staking_lockup_time_in_days = 0
+
     momentum_height = 0
     node_version = ''
     momentum_month = 0
@@ -83,10 +92,9 @@ class NomData(object):
     total_expected_daily_momentums_top_30 = 0
     total_expected_daily_momentums_not_top_30 = 0
 
-    # Total staked amount will have to be indexed separately
     total_staked_znn = {
-        'momentum_height': 0,
-        'amount': 0
+        'amount': 0,
+        'weighted_amount': 0
     }
     total_delegated_znn = 0
     total_delegated_znn_top_30 = 0
@@ -125,10 +133,11 @@ class NomData(object):
     yearly_qsr_reward_pool_for_lps = 0
     yearly_qsr_reward_pool_for_sentinels = 0
 
-    async def update(self, node_url, znn_price_usd, qsr_price_usd):
+    async def update(self, node_url, reference_staking_address, znn_price_usd, qsr_price_usd):
         self.node_url = node_url
         self.znn_price_usd = znn_price_usd
         self.qsr_price_usd = qsr_price_usd
+        self.reference_staking_address = reference_staking_address
 
         # Update data from the node
         await asyncio.gather(
@@ -136,6 +145,8 @@ class NomData(object):
             self.__update_node_version(),
             self.__update_znn_supply(),
             self.__update_qsr_supply(),
+            self.__update_total_staked_znn(),
+            self.__update_reference_staking_data(),
             self.__update_sentinel_data(),
             self.__update_pillar_data())
 
@@ -145,7 +156,11 @@ class NomData(object):
         # Update the yearly reward pools based on current reward emissions rate
         self.__update_current_yearly_reward_pools()
 
-        # Update APRs (LP and staking not implemented yet)
+        # Update staking data
+        self.__update_staking_data()
+
+        # Update APRs (LP not implemented yet)
+        self.__update_staking_apr()
         self.__update_sentinel_apr()
         self.__update_pillar_apr_top_30()
         self.__update_pillar_apr_not_top_30()
@@ -212,6 +227,40 @@ class NomData(object):
             self.qsr_supply = r['result']['totalSupply']
         except KeyError:
             print('Error: __update_qsr_supply')
+
+    async def __update_total_staked_znn(self):
+        r = await HttpWrapper.post(self.node_url, self.__create_request('ledger.getAccountInfoByAddress', [
+            self.STAKING_CONTRACT_ADDRESS
+        ]))
+        try:
+            self.total_staked_znn['amount'] = r['result']['balanceInfoMap'][self.ZNN_ZTS_ID]['balance'] / self.DECIMALS
+        except KeyError:
+            print('Error: __update_total_staked_znn')
+
+    async def __update_reference_staking_data(self):
+        if len(self.reference_staking_address) == 0:
+            return
+
+        r = await HttpWrapper.post(self.node_url, self.__create_request('embedded.stake.getFrontierRewardByPage', [
+            self.reference_staking_address, 0, 1
+        ]))
+        try:
+            if r['result']['count'] > 0:
+                self.reference_staking_reward_previous_epoch = r[
+                    'result']['list'][0]['qsrAmount'] / self.DECIMALS
+        except KeyError:
+            print('Error: __update_reference_staking_data')
+
+        r = await HttpWrapper.post(self.node_url, self.__create_request('embedded.stake.getEntriesByAddress', [
+            self.reference_staking_address, 0, 1
+        ]))
+        try:
+            if r['result']['count'] > 0:
+                self.reference_staking_amount = r['result']['list'][0]['amount'] / self.DECIMALS
+                self.reference_weighted_staking_amount = r['result'][
+                    'list'][0]['weightedAmount'] / self.DECIMALS
+        except KeyError:
+            print('Error: __update_reference_staking_data')
 
     async def __update_sentinel_data(self):
         r = await HttpWrapper.post(self.node_url, self.__create_request('embedded.sentinel.getAllActive', [0, 1000]))
@@ -299,6 +348,27 @@ class NomData(object):
         except KeyError:
             print('Error: __update_pillar_data')
 
+    def __update_staking_data(self):
+        # Calculations based on https://github.com/zenon-network/go-zenon/blob/1baa7c4e057da4f2708a970b4fedf70a8de77fbe/vm/embedded/implementation/stake.go
+
+        rewards_per_epoch = (self.__get_current_yearly_qsr_rewards(
+        ) * self.QSR_REWARD_SHARE_FOR_STAKERS) / (self.DAYS_PER_YEAR * self.EPOCH_LENGTH_IN_DAYS)
+
+        # If no reference staking address is provided use a guesstimation to calculate total weighted stake.
+        if len(self.reference_staking_address) == 0 or self.reference_staking_reward_previous_epoch == 0:
+            estimated_avg_staking_lockup_time_in_months = 3
+            self.total_staked_znn['weighted_amount'] = (
+                (9 + estimated_avg_staking_lockup_time_in_months) * self.total_staked_znn['amount']) / 10
+
+            self.avg_staking_lockup_time_in_days = estimated_avg_staking_lockup_time_in_months * self.DAYS_PER_MONTH
+
+        else:
+            self.total_staked_znn['weighted_amount'] = (
+                rewards_per_epoch * self.reference_weighted_staking_amount) / self.reference_staking_reward_previous_epoch
+
+            self.avg_staking_lockup_time_in_days = round(
+                (((self.total_staked_znn['weighted_amount'] * 10) / self.total_staked_znn['amount']) - 9) * self.DAYS_PER_MONTH)
+
     def __update_total_expected_momentums_for_pillars(self):
         # Group B size (includes half of the top 30 pillars and all non top 30 pillars)
         group_b_size = self.pillar_count - 15
@@ -333,12 +403,19 @@ class NomData(object):
         self.yearly_qsr_reward_pool_for_sentinels = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_SENTINELS
 
+    def __update_staking_apr(self):
+        reward_pool_in_usd = self.yearly_qsr_reward_pool_for_stakers * self.qsr_price_usd
+        total_staked_value_in_usd = self.total_staked_znn['amount'] * \
+            self.znn_price_usd
+        self.staking_apr = reward_pool_in_usd / total_staked_value_in_usd * \
+            100 if total_staked_value_in_usd > 0 else 0
+
     def __update_delegate_apr(self):
         total_apr = 0
         sharing_pillars_count = 0
         for pillar in self.pillars:
-            # Only include Pillars that have over 0% delegate APR
-            if pillar.delegate_apr > 0:
+            # Only include Pillars that have over 0% delegate APR and a weight of at least 10k ZNN
+            if pillar.delegate_apr > 0 and pillar.weight / self.DECIMALS >= 10000:
                 total_apr = total_apr + pillar.apr
                 sharing_pillars_count = sharing_pillars_count + 1
         self.delegate_apr = total_apr / \

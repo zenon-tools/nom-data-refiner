@@ -30,9 +30,10 @@ def write_nom_data_to_file(data, file_name):
         'znnPriceUsd': data.znn_price_usd,
         'qsrPriceUsd': data.qsr_price_usd,
         'totalStakedZnn': {
-            'momentumHeight': data.total_staked_znn['momentum_height'],
+            'weightedAmount': data.total_staked_znn['weighted_amount'],
             'amount':  data.total_staked_znn['amount']
         },
+        'avgStakingLockupTimeInDays': data.avg_staking_lockup_time_in_days,
         'totalDelegatedZnn': data.total_delegated_znn,
         'sentinelCount': data.sentinel_count,
         'pillarCount': data.pillar_count,
@@ -127,7 +128,10 @@ async def main():
 
     # Update NoM data
     nom_data = NomData()
-    await nom_data.update(node_url=cfg['node_url_http'], znn_price_usd=znn_price, qsr_price_usd=qsr_price)
+    await nom_data.update(node_url=cfg['node_url_http'],
+                          reference_staking_address=cfg['reference_staking_address'],
+                          znn_price_usd=znn_price,
+                          qsr_price_usd=qsr_price)
 
     # Write NoM data to file
     write_nom_data_to_file(
