@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 from utils.http_wrapper import HttpWrapper
 
 
@@ -176,17 +177,19 @@ class NomData(object):
                 'method': method, 'params': params}
 
     def __get_current_yearly_znn_rewards(self):
-        month = self.__get_momentum_month(self.momentum_height)
+        month = self.__get_current_epoch_month()
         return self.DAILY_ZNN_REWARDS_BY_MONTH[month] * self.DAYS_PER_MONTH * self.MONTHS_PER_YEAR
 
     def __get_current_yearly_qsr_rewards(self):
-        month = self.__get_momentum_month(self.momentum_height)
+        month = self.__get_current_epoch_month()
         return self.DAILY_QSR_REWARDS_BY_MONTH[month] * self.DAYS_PER_MONTH * self.MONTHS_PER_YEAR
 
-    def __get_momentum_month(self, height):
-        momentums_per_month = self.HOURS_PER_MONTH * self.MOMENTUMS_PER_HOUR
+    def __get_current_epoch_month(self):
+        genesis = datetime.datetime(year=2021, month=11, day=24, hour=12, tzinfo=datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        epoch = (now - genesis).days
         for i in range(0, 12):
-            if height < momentums_per_month * (i + 1):
+            if epoch < self.DAYS_PER_MONTH * (i + 1):
                 return i
         return 0
 
