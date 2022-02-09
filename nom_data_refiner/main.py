@@ -4,6 +4,7 @@ import os
 import asyncio
 import math
 import datetime
+from pcs_pool import PcsPool
 from utils.market_wrapper import MarketWrapper
 from nom_data import NomData
 
@@ -91,6 +92,23 @@ def write_pillar_data_to_file(data, file_name):
     write_to_file_as_json(json_data, file_name)
 
 
+def write_pcs_pool_data_to_file(data, file_name):
+
+    # Convert PCS data to JSON
+    json_data = {
+        'timestamp': math.trunc(time.time()),
+        'wZnnPriceUsd': data.wznn_price_usd,
+        'wBnbPriceUsd': data.wbnb_price_usd,
+        'impermanentLossPast7d': data.impermanent_loss,
+        'liquidityUsd': data.liquidity_usd,
+        'yearlyTradingFeesUsd': data.yearly_trading_fees_usd,
+        'cakeLpTotalSupply': data.cake_lp_total_supply
+    }
+
+    # Dump data to file
+    write_to_file_as_json(json_data, file_name)
+
+
 async def main():
 
     # Get file path
@@ -109,29 +127,40 @@ async def main():
     # Check if market cache exists. If not, create fallback data.
     if not os.path.exists(f'./{DATA_STORE_DIR}/market_cache.json'):
         write_to_file_as_json(
-            {'timestamp': math.trunc(time.time()), 'znn_price_usd': 50, 'qsr_price_usd': 5}, f'{DATA_STORE_DIR}/market_cache.json')
+            {'timestamp': math.trunc(time.time()), 'znn_price_usd': 50, 'qsr_price_usd': 5, 'bnb_price_usd': 360}, f'{DATA_STORE_DIR}/market_cache.json')
 
     # Get coin prices. Set QSR price as 1/10th of ZNN until a market is open.
     market = MarketWrapper()
     znn_price = await market.get_price_usd(coin='zenon')
-    qsr_price = znn_price / 10
+    qsr_price = round(znn_price / 10, 2)
+    bnb_price = await market.get_price_usd(coin='binancecoin')
 
     # If bad response use cached price data, else cache the new data.
-    if znn_price == 0:
+    if znn_price == 0 or bnb_price == 0:
         market_cache = read_file(
             f'{DATA_STORE_DIR}/market_cache.json')
         znn_price = market_cache['znn_price_usd']
         qsr_price = market_cache['qsr_price_usd']
+        bnb_price = market_cache['bnb_price_usd']
     else:
-        write_to_file_as_json({'timestamp': math.trunc(time.time()), 'znn_price_usd': znn_price, 'qsr_price_usd': qsr_price},
+        write_to_file_as_json({'timestamp': math.trunc(time.time()), 'znn_price_usd': znn_price, 'qsr_price_usd': qsr_price, 'bnb_price_usd': bnb_price},
                               f'{DATA_STORE_DIR}/market_cache.json')
+
+    # Update PS data
+    pcs_pool = PcsPool()
+    await pcs_pool.update(data_store_dir=DATA_STORE_DIR, znn_price_usd=znn_price, bnb_price_usd=bnb_price, bitquery_api_key=cfg['bitquery_api_key'], bsc_scan_api_key=cfg['bsc_scan_api_key'])
 
     # Update NoM data
     nom_data = NomData()
     await nom_data.update(node_url=cfg['node_url_http'],
                           reference_staking_address=cfg['reference_staking_address'],
                           znn_price_usd=znn_price,
-                          qsr_price_usd=qsr_price)
+                          qsr_price_usd=qsr_price,
+                          pcs_pool=pcs_pool)
+
+    # Write PCS data to file
+    write_pcs_pool_data_to_file(
+        pcs_pool, f'{DATA_STORE_DIR}/pcs_pool_data.json')
 
     # Write NoM data to file
     write_nom_data_to_file(

@@ -78,6 +78,9 @@ class NomData(object):
         5000
     ]
 
+    # Pancakeswap pool data
+    pcs_pool = None
+
     # A reference staking address is used to calculate the network's total weighted stake.
     # It's assumed that the reference address is staking with a lockup period of 12 months.
     reference_staking_address = ''
@@ -134,11 +137,12 @@ class NomData(object):
     yearly_qsr_reward_pool_for_lps = 0
     yearly_qsr_reward_pool_for_sentinels = 0
 
-    async def update(self, node_url, reference_staking_address, znn_price_usd, qsr_price_usd):
+    async def update(self, node_url, reference_staking_address, znn_price_usd, qsr_price_usd, pcs_pool):
         self.node_url = node_url
         self.znn_price_usd = znn_price_usd
         self.qsr_price_usd = qsr_price_usd
         self.reference_staking_address = reference_staking_address
+        self.pcs_pool = pcs_pool
 
         # Update data from the node
         await asyncio.gather(
@@ -162,6 +166,7 @@ class NomData(object):
 
         # Update APRs (LP not implemented yet)
         self.__update_staking_apr()
+        self.__update_lp_apr()
         self.__update_sentinel_apr()
         self.__update_pillar_apr_top_30()
         self.__update_pillar_apr_not_top_30()
@@ -363,7 +368,8 @@ class NomData(object):
             self.total_staked_znn['weighted_amount'] = (
                 (9 + estimated_avg_staking_lockup_time_in_months) * self.total_staked_znn['amount']) / 10
 
-            self.avg_staking_lockup_time_in_days = estimated_avg_staking_lockup_time_in_months * self.DAYS_PER_MONTH
+            self.avg_staking_lockup_time_in_days = estimated_avg_staking_lockup_time_in_months * \
+                self.DAYS_PER_MONTH
 
         else:
             self.total_staked_znn['weighted_amount'] = (
@@ -423,6 +429,17 @@ class NomData(object):
                 sharing_pillars_count = sharing_pillars_count + 1
         self.delegate_apr = total_apr / \
             sharing_pillars_count if sharing_pillars_count > 0 else 0
+
+    def __update_lp_apr(self):
+        total_rewards_usd = self.yearly_znn_reward_pool_for_lps * self.znn_price_usd + \
+            self.yearly_qsr_reward_pool_for_lps * self.qsr_price_usd
+        total_rewards_usd = total_rewards_usd + self.pcs_pool.yearly_trading_fees_usd
+
+        if self.pcs_pool.liquidity_usd > 0:
+            self.lp_apr = total_rewards_usd / \
+                self.pcs_pool.liquidity_usd * 100
+        else:
+            self.lp_apr = 0
 
     def __update_sentinel_apr(self):
         total_rewards_usd = self.yearly_znn_reward_pool_for_sentinels * self.znn_price_usd + \
