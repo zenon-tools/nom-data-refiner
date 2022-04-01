@@ -137,6 +137,7 @@ class NomData(object):
     yearly_qsr_reward_pool_for_stakers = 0
     yearly_qsr_reward_pool_for_lps = 0
     yearly_qsr_reward_pool_for_sentinels = 0
+    yearly_qsr_reward_pool_for_lp_program = 0
 
     async def update(self, node_url, reference_staking_address, znn_price_usd, qsr_price_usd, pcs_pool):
         self.node_url = node_url
@@ -397,8 +398,8 @@ class NomData(object):
         total_yearly_znn_rewards = self.__get_current_yearly_znn_rewards()
         total_yearly_qsr_rewards = self.__get_current_yearly_qsr_rewards()
 
-        # self.yearly_znn_reward_pool_for_lps = total_yearly_znn_rewards * \
-        #     self.ZNN_REWARD_SHARE_FOR_LPS
+        self.yearly_znn_reward_pool_for_lps = total_yearly_znn_rewards * \
+            self.ZNN_REWARD_SHARE_FOR_LPS
         self.yearly_znn_reward_pool_for_sentinels = total_yearly_znn_rewards * \
             self.ZNN_REWARD_SHARE_FOR_SENTINELS
 
@@ -409,8 +410,8 @@ class NomData(object):
 
         self.yearly_qsr_reward_pool_for_stakers = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_STAKERS
-        # self.yearly_qsr_reward_pool_for_lps = total_yearly_qsr_rewards * \
-        #    self.QSR_REWARD_SHARE_FOR_LPS
+        self.yearly_qsr_reward_pool_for_lps = total_yearly_qsr_rewards * \
+            self.QSR_REWARD_SHARE_FOR_LPS
         self.yearly_qsr_reward_pool_for_sentinels = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_SENTINELS
 
@@ -449,7 +450,7 @@ class NomData(object):
         total_rewards_usd = daily_qsr_rewards * self.qsr_price_usd * \
             self.DAYS_PER_YEAR + self.pcs_pool.yearly_trading_fees_usd
 
-        self.yearly_qsr_reward_pool_for_lps = daily_qsr_rewards * self.DAYS_PER_YEAR
+        self.yearly_qsr_reward_pool_for_lp_program = daily_qsr_rewards * self.DAYS_PER_YEAR
 
         if self.pcs_pool.liquidity_usd > 0:
             self.lp_apr = total_rewards_usd / \

@@ -51,6 +51,7 @@ def write_nom_data_to_file(data, file_name):
         'yearlyQsrRewardPoolForStakers': data.yearly_qsr_reward_pool_for_stakers,
         'yearlyQsrRewardPoolForLps': data.yearly_qsr_reward_pool_for_lps,
         'yearlyQsrRewardPoolForSentinels': data.yearly_qsr_reward_pool_for_sentinels,
+        'yearlyQsrRewardPoolForLpProgram': data.yearly_qsr_reward_pool_for_lp_program,
         'yearlyZnnMomentumRewardPoolForPillarsTop30': data.yearly_znn_momentum_reward_pool_for_pillars_top_30,
         'yearlyZnnMomentumRewardPoolForPillarsNotTop30': data.yearly_znn_momentum_reward_pool_for_pillars_not_top_30,
         'yearlyZnnDelegateRewardPoolForPillars': data.yearly_znn_delegate_reward_pool_for_pillars,
