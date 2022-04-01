@@ -14,6 +14,8 @@ class PcsPool(object):
     BSC_SCAN_API_URL = 'https://api.bscscan.com/api'
 
     POOL_ADDRESS = '0xe6b03fcb16daf3462ddfb8b0afb3f0e87d38d884'
+    WBNB_ADDRESS = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c'
+    WZNN_ADDRESS = '0x84b174628911896a3b87Fa6980D05Dbc2eE74836'
     POOL_REWARD_FEE_SHARE = 0.0017
     MOVING_AVERAGE_LENGTH_IN_DAYS = 7
     DAYS_PER_YEAR = 12 * 30
@@ -39,7 +41,41 @@ class PcsPool(object):
         self.wbnb_price_usd = bnb_price_usd
         self.bitquery_api_key = bitquery_api_key
         self.bsc_scan_api_key = bsc_scan_api_key
-        await asyncio.gather(self.__update_pcs_pool_data(), self.__update_cake_lp())
+        await self.__update_pool_balances()
+        await self.__update_cake_lp()
+        await self.__update_pcs_pool_data()
+        # await asyncio.gather(self.__update_pcs_pool_data(), self.__update_cake_lp())
+
+    async def __update_pool_balances(self):
+        file = f'{self.data_store_dir}/pool_balances_cache.json'
+        r = self.__read_file(file)
+        timestamp = math.trunc(time.time())
+
+        if r is None or len(r['wbnb_data']) == 0 or len(r['wznn_data']) == 0 or r['timestamp'] + 590 < timestamp:
+            r_wbnb = await HttpWrapper.get(f'{self.BSC_SCAN_API_URL}?module=account&action=tokenbalance&contractaddress={self.WBNB_ADDRESS}&address={self.POOL_ADDRESS}&tag=latest&apikey={self.bsc_scan_api_key}')
+            r_wznn = await HttpWrapper.get(f'{self.BSC_SCAN_API_URL}?module=account&action=tokenbalance&contractaddress={self.WZNN_ADDRESS}&address={self.POOL_ADDRESS}&tag=latest&apikey={self.bsc_scan_api_key}')
+
+            if 'result' in r_wbnb and 'result' in r_wznn:
+                self.__write_to_file_as_json(
+                    {'wbnb_data': r_wbnb, 'wznn_data': r_wznn, 'timestamp': timestamp}, file)
+                print('Refreshed pool balances data')
+            else:
+                r_wbnb = r['wbnb_data']
+                r_wznn = r['wznn_data']
+                print('Refresh failed. Used pool balances cache')
+        else:
+            r_wbnb = r['wbnb_data']
+            r_wznn = r['wznn_data']
+            print('Used pool balances cache')
+
+        try:
+            self.wbnb_reserve = float(r_wbnb['result']) / 1000000000000000000
+            self.wznn_reserve = float(r_wznn['result']) / 100000000
+            self.liquidity_usd = self.wznn_reserve * self.wznn_price_usd + \
+                self.wbnb_reserve * self.wbnb_price_usd
+
+        except KeyError:
+            print('Error: __update_pool_balances')
 
     async def __update_cake_lp(self):
         file = f'{self.data_store_dir}/cake_lp_supply_cache.json'
@@ -48,9 +84,14 @@ class PcsPool(object):
 
         if r is None or len(r['data']) == 0 or r['timestamp'] + 590 < timestamp:
             r = await HttpWrapper.get(f'{self.BSC_SCAN_API_URL}?module=stats&action=tokensupply&contractaddress={self.POOL_ADDRESS}&apikey={self.bsc_scan_api_key}')
-            self.__write_to_file_as_json(
-                {'data': r, 'timestamp': timestamp}, file)
-            print('Refreshed Cake LP supply data')
+
+            if 'result' in r:
+                self.__write_to_file_as_json(
+                    {'data': r, 'timestamp': timestamp}, file)
+                print('Refreshed Cake LP supply data')
+            else:
+                r = r['data']
+                print('Refresh failed. Used Cake LP supply cache')
         else:
             r = r['data']
             print('Used Cake LP supply cache')
@@ -109,29 +150,24 @@ class PcsPool(object):
                 self.weekly_volume_usd = self.weekly_volume_usd + \
                     float(day_data['tradeAmount'])
 
-            for token in data['data']['ethereum']['address'][0]['balances']:
-                symbol = token['currency']['symbol'].lower()
-                if symbol == 'wznn':
-                    self.wznn_reserve = float(token['value'])
-                elif symbol == 'wbnb':
-                    self.wbnb_reserve = float(token['value'])
-
-            self.wznn_reserve = float(
+            wznn_reserve_end = float(
                 data['data']['ethereum']['endReserves'][0]['arguments'][0]['value']) / 100000000
-            self.wbnb_reserve = float(
+            wbnb_reserve_end = float(
                 data['data']['ethereum']['endReserves'][0]['arguments'][1]['value']) / 1000000000000000000
             wznn_reserve_start = float(
                 data['data']['ethereum']['startReserves'][0]['arguments'][0]['value']) / 100000000
             wbnb_reserve_start = float(
                 data['data']['ethereum']['startReserves'][0]['arguments'][1]['value']) / 1000000000000000000
-            self.liquidity_usd = self.wznn_reserve * self.wznn_price_usd + \
-                self.wbnb_reserve * self.wbnb_price_usd
+
+            # Use liquidity from BSC Scan for now
+            # self.liquidity_usd = self.wznn_reserve * self.wznn_price_usd + \
+            #     self.wbnb_reserve * self.wbnb_price_usd
 
             self.yearly_trading_fees_usd = self.weekly_volume_usd * \
                 self.POOL_REWARD_FEE_SHARE / self.MOVING_AVERAGE_LENGTH_IN_DAYS * self.DAYS_PER_YEAR
 
             self.impermanent_loss = self.__calculate_impermanent_loss(
-                wznn_reserve_start, wbnb_reserve_start, self.wznn_reserve, self.wbnb_reserve)
+                wznn_reserve_start, wbnb_reserve_start, wznn_reserve_end, wbnb_reserve_end)
 
         except KeyError:
             print('Error: __update_pcs_pool_data')

@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import math
 from utils.http_wrapper import HttpWrapper
 
 
@@ -190,7 +191,8 @@ class NomData(object):
         return self.DAILY_QSR_REWARDS_BY_MONTH[month] * self.DAYS_PER_MONTH * self.MONTHS_PER_YEAR
 
     def __get_current_epoch_month(self):
-        genesis = datetime.datetime(year=2021, month=11, day=24, hour=12, tzinfo=datetime.timezone.utc)
+        genesis = datetime.datetime(
+            year=2021, month=11, day=24, hour=12, tzinfo=datetime.timezone.utc)
         now = datetime.datetime.now(datetime.timezone.utc)
         epoch = (now - genesis).days
         for i in range(0, 12):
@@ -395,8 +397,8 @@ class NomData(object):
         total_yearly_znn_rewards = self.__get_current_yearly_znn_rewards()
         total_yearly_qsr_rewards = self.__get_current_yearly_qsr_rewards()
 
-        self.yearly_znn_reward_pool_for_lps = total_yearly_znn_rewards * \
-            self.ZNN_REWARD_SHARE_FOR_LPS
+        # self.yearly_znn_reward_pool_for_lps = total_yearly_znn_rewards * \
+        #     self.ZNN_REWARD_SHARE_FOR_LPS
         self.yearly_znn_reward_pool_for_sentinels = total_yearly_znn_rewards * \
             self.ZNN_REWARD_SHARE_FOR_SENTINELS
 
@@ -407,8 +409,8 @@ class NomData(object):
 
         self.yearly_qsr_reward_pool_for_stakers = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_STAKERS
-        self.yearly_qsr_reward_pool_for_lps = total_yearly_qsr_rewards * \
-            self.QSR_REWARD_SHARE_FOR_LPS
+        # self.yearly_qsr_reward_pool_for_lps = total_yearly_qsr_rewards * \
+        #    self.QSR_REWARD_SHARE_FOR_LPS
         self.yearly_qsr_reward_pool_for_sentinels = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_SENTINELS
 
@@ -431,9 +433,23 @@ class NomData(object):
             sharing_pillars_count if sharing_pillars_count > 0 else 0
 
     def __update_lp_apr(self):
-        total_rewards_usd = self.yearly_znn_reward_pool_for_lps * self.znn_price_usd + \
-            self.yearly_qsr_reward_pool_for_lps * self.qsr_price_usd
-        total_rewards_usd = total_rewards_usd + self.pcs_pool.yearly_trading_fees_usd
+        # total_rewards_usd = self.yearly_znn_reward_pool_for_lps * self.znn_price_usd + \
+        #     self.yearly_qsr_reward_pool_for_lps * self.qsr_price_usd
+        # total_rewards_usd = total_rewards_usd + self.pcs_pool.yearly_trading_fees_usd
+
+        reward_multiplier = 1
+        if self.pcs_pool.wbnb_reserve >= 3000 and self.pcs_pool.wbnb_reserve < 4500:
+            reward_multiplier = 3
+        elif self.pcs_pool.wbnb_reserve >= 2000 and self.pcs_pool.wbnb_reserve < 10000:
+            reward_multiplier = math.floor(self.pcs_pool.wbnb_reserve / 1000)
+        elif self.pcs_pool.wbnb_reserve >= 10000:
+            reward_multiplier = 10
+
+        daily_qsr_rewards =  reward_multiplier * 1800
+        total_rewards_usd = daily_qsr_rewards * self.qsr_price_usd * \
+            self.DAYS_PER_YEAR + self.pcs_pool.yearly_trading_fees_usd
+
+        self.yearly_qsr_reward_pool_for_lps = daily_qsr_rewards * self.DAYS_PER_YEAR
 
         if self.pcs_pool.liquidity_usd > 0:
             self.lp_apr = total_rewards_usd / \
