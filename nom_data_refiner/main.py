@@ -110,7 +110,7 @@ def write_pcs_pool_data_to_file(data, file_name):
     write_to_file_as_json(json_data, file_name)
 
 
-async def main():
+async def update():
 
     # Get file path
     path = os.path.dirname(os.path.abspath(__file__))
@@ -171,7 +171,14 @@ async def main():
     write_pillar_data_to_file(
         nom_data, f'{DATA_STORE_DIR}/pillar_data.json')
 
+
+async def main():
+    while True:
+        print(f'{str(datetime.datetime.now())}: Starting')
+        await update()
+        print(f'{str(datetime.datetime.now())}: Completed')
+        time.sleep(10)
+
+
 if __name__ == '__main__':
-    print(f'{str(datetime.datetime.now())}: Starting')
     asyncio.run(main())
-    print(f'{str(datetime.datetime.now())}: Completed')
