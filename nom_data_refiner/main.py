@@ -55,6 +55,7 @@ def write_nom_data_to_file(data, file_name):
         'yearlyZnnMomentumRewardPoolForPillarsTop30': data.yearly_znn_momentum_reward_pool_for_pillars_top_30,
         'yearlyZnnMomentumRewardPoolForPillarsNotTop30': data.yearly_znn_momentum_reward_pool_for_pillars_not_top_30,
         'yearlyZnnDelegateRewardPoolForPillars': data.yearly_znn_delegate_reward_pool_for_pillars,
+        'lpProgramParticipationRate': data.lp_program_participation_rate
     }
 
     # Dump data to file
@@ -149,12 +150,13 @@ async def update():
 
     # Update PS data
     pcs_pool = PcsPool()
-    await pcs_pool.update(data_store_dir=DATA_STORE_DIR, znn_price_usd=znn_price, bnb_price_usd=bnb_price, bitquery_api_key=cfg['bitquery_api_key'], bsc_scan_api_key=cfg['bsc_scan_api_key'])
+    await pcs_pool.update(DATA_STORE_DIR, znn_price, bnb_price, cfg['bsc_reference_address_cake_lp_balance'], cfg['bitquery_api_key'], cfg['bsc_scan_api_key'])
 
     # Update NoM data
     nom_data = NomData()
     await nom_data.update(node_url=cfg['node_url_http'],
                           reference_staking_address=cfg['reference_staking_address'],
+                          reference_lp_address=cfg['reference_lp_address'],
                           znn_price_usd=znn_price,
                           qsr_price_usd=qsr_price,
                           pcs_pool=pcs_pool)

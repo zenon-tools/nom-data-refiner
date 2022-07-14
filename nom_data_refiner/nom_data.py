@@ -90,6 +90,9 @@ class NomData(object):
     reference_weighted_staking_amount = 0
     avg_staking_lockup_time_in_days = 0
 
+    reference_lp_address = ''
+    lp_program_participation_rate = 0
+
     momentum_height = 0
     node_version = ''
     momentum_month = 0
@@ -139,11 +142,15 @@ class NomData(object):
     yearly_qsr_reward_pool_for_sentinels = 0
     yearly_qsr_reward_pool_for_lp_program = 0
 
-    async def update(self, node_url, reference_staking_address, znn_price_usd, qsr_price_usd, pcs_pool):
+    yearly_usd_reward_pool_for_lp_program = 0
+    daily_qsr_reward_pool_for_lp_program = 0
+
+    async def update(self, node_url, reference_staking_address, reference_lp_address, znn_price_usd, qsr_price_usd, pcs_pool):
         self.node_url = node_url
         self.znn_price_usd = znn_price_usd
         self.qsr_price_usd = qsr_price_usd
         self.reference_staking_address = reference_staking_address
+        self.reference_lp_address = reference_lp_address
         self.pcs_pool = pcs_pool
 
         # Update data from the node
@@ -165,6 +172,9 @@ class NomData(object):
 
         # Update staking data
         self.__update_staking_data()
+
+        # Update LP program participation rate
+        await self.__update_lp_program_participation_rate()
 
         # Update APRs (LP not implemented yet)
         self.__update_staking_apr()
@@ -415,6 +425,42 @@ class NomData(object):
         self.yearly_qsr_reward_pool_for_sentinels = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_SENTINELS
 
+        # LP reward program
+        reward_multiplier = 1
+        if self.pcs_pool.wbnb_reserve >= 3000 and self.pcs_pool.wbnb_reserve < 4500:
+            reward_multiplier = 3
+        elif self.pcs_pool.wbnb_reserve >= 2000 and self.pcs_pool.wbnb_reserve < 10000:
+            reward_multiplier = math.floor(self.pcs_pool.wbnb_reserve / 1000)
+        elif self.pcs_pool.wbnb_reserve >= 10000:
+            reward_multiplier = 10
+
+        self.daily_qsr_reward_pool_for_lp_program = reward_multiplier * 1800
+
+        self.yearly_usd_reward_pool_for_lp_program = self.daily_qsr_reward_pool_for_lp_program * self.qsr_price_usd * self.DAYS_PER_YEAR
+        self.yearly_qsr_reward_pool_for_lp_program = self.daily_qsr_reward_pool_for_lp_program * self.DAYS_PER_YEAR
+
+
+    async def __update_lp_program_participation_rate(self):
+        lp_program_address = 'z1qqw8f3qxx9zg92xgckqdpfws3dw07d26afsj74'
+        qsr_standard = 'zts1qsrxxxxxxxxxxxxxmrhjll'
+        reward = 0
+        r = await HttpWrapper.post(self.node_url, self.__create_request('ledger.getUnreceivedBlocksByAddress', [self.reference_lp_address, 0, 1]))
+        if len(r['result']['list']) > 0 and r['result']['list'][0]['tokenStandard'] == qsr_standard and r['result']['list'][0]['address'] == lp_program_address:
+            reward = r['result']['list'][0]['amount'] / self.DECIMALS
+
+        if reward == 0:
+            r = await HttpWrapper.post(self.node_url, self.__create_request('ledger.getAccountBlocksByPage', [self.reference_lp_address, 0, 10]))
+            if len(r['result']['list']) > 0:
+                for block in r['result']['list']:
+                    if (len(block['pairedAccountBlock']) > 0) and block['pairedAccountBlock']['tokenStandard'] == qsr_standard and block['pairedAccountBlock']['address'] == lp_program_address:
+                        reward = block['pairedAccountBlock']['amount'] / self.DECIMALS
+                        break            
+        
+        reward_share = reward / self.daily_qsr_reward_pool_for_lp_program
+
+        self.lp_program_participation_rate = self.pcs_pool.reference_address_reward_share / reward_share if reward_share > 0 else 1
+        print('LP participation rate: ' + str(self.lp_program_participation_rate))
+
     def __update_staking_apr(self):
         reward_pool_in_usd = self.yearly_qsr_reward_pool_for_stakers * self.qsr_price_usd
         total_staked_value_in_usd = self.total_staked_znn['amount'] * \
@@ -438,23 +484,9 @@ class NomData(object):
         #     self.yearly_qsr_reward_pool_for_lps * self.qsr_price_usd
         # total_rewards_usd = total_rewards_usd + self.pcs_pool.yearly_trading_fees_usd
 
-        reward_multiplier = 1
-        if self.pcs_pool.wbnb_reserve >= 3000 and self.pcs_pool.wbnb_reserve < 4500:
-            reward_multiplier = 3
-        elif self.pcs_pool.wbnb_reserve >= 2000 and self.pcs_pool.wbnb_reserve < 10000:
-            reward_multiplier = math.floor(self.pcs_pool.wbnb_reserve / 1000)
-        elif self.pcs_pool.wbnb_reserve >= 10000:
-            reward_multiplier = 10
-
-        daily_qsr_rewards =  reward_multiplier * 1800
-        total_rewards_usd = daily_qsr_rewards * self.qsr_price_usd * \
-            self.DAYS_PER_YEAR + self.pcs_pool.yearly_trading_fees_usd
-
-        self.yearly_qsr_reward_pool_for_lp_program = daily_qsr_rewards * self.DAYS_PER_YEAR
-
         if self.pcs_pool.liquidity_usd > 0:
-            self.lp_apr = total_rewards_usd / \
-                self.pcs_pool.liquidity_usd * 100
+            self.lp_apr = (self.yearly_usd_reward_pool_for_lp_program + self.pcs_pool.yearly_trading_fees_usd * self.lp_program_participation_rate) / \
+                (self.pcs_pool.liquidity_usd * self.lp_program_participation_rate) * 100
         else:
             self.lp_apr = 0
 

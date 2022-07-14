@@ -30,21 +30,24 @@ class PcsPool(object):
     impermanent_loss = 0
     cake_lp_total_supply = 0
 
+    reference_cake_lp_balance = 0
+    reference_address_reward_share = 0
+
     bitquery_api_key = ''
     bsc_scan_api_key = ''
 
     data_store_dir = ''
 
-    async def update(self, data_store_dir, znn_price_usd, bnb_price_usd, bitquery_api_key, bsc_scan_api_key):
+    async def update(self, data_store_dir, znn_price_usd, bnb_price_usd, reference_cake_lp_balance, bitquery_api_key, bsc_scan_api_key):
         self.data_store_dir = data_store_dir
         self.wznn_price_usd = znn_price_usd
         self.wbnb_price_usd = bnb_price_usd
         self.bitquery_api_key = bitquery_api_key
         self.bsc_scan_api_key = bsc_scan_api_key
+        self.reference_cake_lp_balance = reference_cake_lp_balance
         await self.__update_pool_balances()
         await self.__update_cake_lp()
         await self.__update_pcs_pool_data()
-        # await asyncio.gather(self.__update_pcs_pool_data(), self.__update_cake_lp())
 
     async def __update_pool_balances(self):
         file = f'{self.data_store_dir}/pool_balances_cache.json'
@@ -101,6 +104,8 @@ class PcsPool(object):
                 r['result']) / 1000000000000000000
         except KeyError:
             print('Error: __update_cake_lp')
+
+        self.reference_address_reward_share = self.reference_cake_lp_balance / self.cake_lp_total_supply
 
     async def __update_pcs_pool_data(self):
         now = datetime.now(timezone.utc)

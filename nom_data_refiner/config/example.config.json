@@ -1,6 +1,8 @@
 {
     "node_url_http": "http://127.0.0.1:35997",
     "reference_staking_address": "a_nom_address_that_has_an_active_stake",
+    "reference_lp_address": "a_nom_address_that_receives_lp_rewards",
+    "bsc_reference_address_cake_lp_balance": 0,
     "bitquery_api_key": "",
     "bsc_scan_api_key": ""
 }
