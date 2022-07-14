@@ -474,7 +474,7 @@ class NomData(object):
         for pillar in self.pillars:
             # Only include Pillars that have over 0% delegate APR and a weight of at least 10k ZNN
             if pillar.delegate_apr > 0 and pillar.weight / self.DECIMALS >= 10000:
-                total_apr = total_apr + pillar.apr
+                total_apr = total_apr + pillar.delegate_apr
                 sharing_pillars_count = sharing_pillars_count + 1
         self.delegate_apr = total_apr / \
             sharing_pillars_count if sharing_pillars_count > 0 else 0
