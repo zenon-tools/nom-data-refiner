@@ -127,9 +127,9 @@ async def update():
         os.makedirs(DATA_STORE_DIR, exist_ok=True)
 
     # Check if market cache exists. If not, create fallback data.
-    if not os.path.exists(f'./{DATA_STORE_DIR}/market_cache.json'):
+    if not os.path.exists(f'{DATA_STORE_DIR}/market_cache.json'):
         write_to_file_as_json(
-            {'timestamp': math.trunc(time.time()), 'znn_price_usd': 50, 'qsr_price_usd': 5, 'bnb_price_usd': 360}, f'{DATA_STORE_DIR}/market_cache.json')
+            {'timestamp': math.trunc(time.time()), 'znn_price_usd': 1.75, 'qsr_price_usd': 0.175, 'bnb_price_usd': 335}, f'{DATA_STORE_DIR}/market_cache.json')
 
     # Get coin prices. Set QSR price as 1/10th of ZNN until a market is open.
     market = MarketWrapper()
