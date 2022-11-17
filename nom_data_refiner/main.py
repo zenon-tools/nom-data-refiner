@@ -111,6 +111,13 @@ def write_pcs_pool_data_to_file(data, file_name):
     write_to_file_as_json(json_data, file_name)
 
 
+def history_list_to_map(l):
+    m = {}
+    for e in l:
+        m[e[0]] = e[1]
+    return m
+
+
 async def update():
 
     # Get file path
@@ -131,6 +138,11 @@ async def update():
         write_to_file_as_json(
             {'timestamp': math.trunc(time.time()), 'znn_price_usd': 1.75, 'qsr_price_usd': 0.175, 'bnb_price_usd': 335}, f'{DATA_STORE_DIR}/market_cache.json')
 
+    # Check if market history cache exists. If not, create it.
+    if not os.path.exists(f'{DATA_STORE_DIR}/market_history_cache.json'):
+        write_to_file_as_json(
+            {'znn': {'timestamp': 0, 'usd': [], 'eur': [], 'gbp': [], 'cad': [], 'aud': []}, }, f'{DATA_STORE_DIR}/market_history_cache.json')
+
     # Get coin prices. Set QSR price as 1/10th of ZNN until a market is open.
     market = MarketWrapper()
     znn_price = await market.get_price_usd(coin='zenon')
@@ -147,6 +159,26 @@ async def update():
     else:
         write_to_file_as_json({'timestamp': math.trunc(time.time()), 'znn_price_usd': znn_price, 'qsr_price_usd': qsr_price, 'bnb_price_usd': bnb_price},
                               f'{DATA_STORE_DIR}/market_cache.json')
+
+    # Update price history data
+    market_history_cache = read_file(
+        f'{DATA_STORE_DIR}/market_history_cache.json')
+    refresh_interval_secs = 600  # 10 minutes
+
+    if market_history_cache['znn']['timestamp'] + refresh_interval_secs < math.trunc(time.time()):
+        print('Updating market history cache')
+        znn_usd = await market.get_price_history(coin='zenon', currency='usd')
+        znn_eur = await market.get_price_history(coin='zenon', currency='eur')
+        znn_gbp = await market.get_price_history(coin='zenon', currency='gbp')
+        znn_cad = await market.get_price_history(coin='zenon', currency='cad')
+        znn_aud = await market.get_price_history(coin='zenon', currency='aud')
+        if len(znn_usd) > 0 and len(znn_eur) > 0 and len(znn_gbp) > 0 and len(znn_cad) > 0 and len(znn_aud) > 0:
+            write_to_file_as_json({'znn': {'timestamp': math.trunc(time.time()), 'usd': history_list_to_map(znn_usd),
+                                           'eur': history_list_to_map(znn_eur), 'gbp': history_list_to_map(znn_gbp),
+                                           'cad': history_list_to_map(znn_cad), 'aud': history_list_to_map(znn_aud)}, },
+                                  f'{DATA_STORE_DIR}/market_history_cache.json')
+        else:
+            print('Unable to update market history cache')
 
     # Update PS data
     pcs_pool = PcsPool()
