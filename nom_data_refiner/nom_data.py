@@ -195,10 +195,12 @@ class NomData(object):
 
     def __get_current_yearly_znn_rewards(self):
         month = self.__get_current_epoch_month()
+        month = month if month < 12 else 11
         return self.DAILY_ZNN_REWARDS_BY_MONTH[month] * self.DAYS_PER_MONTH * self.MONTHS_PER_YEAR
 
     def __get_current_yearly_qsr_rewards(self):
         month = self.__get_current_epoch_month()
+        month = month if month < 12 else 11
         return self.DAILY_QSR_REWARDS_BY_MONTH[month] * self.DAYS_PER_MONTH * self.MONTHS_PER_YEAR
 
     def __get_current_epoch_month(self):
@@ -206,7 +208,7 @@ class NomData(object):
             year=2021, month=11, day=24, hour=12, tzinfo=datetime.timezone.utc)
         now = datetime.datetime.now(datetime.timezone.utc)
         epoch = (now - genesis).days
-        for i in range(0, 12):
+        for i in range(0, 1000):
             if epoch < self.DAYS_PER_MONTH * (i + 1):
                 return i
         return 0
