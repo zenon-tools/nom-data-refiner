@@ -561,12 +561,11 @@ class NomData(object):
             produced = p_data['currentStats']['producedMomentums']
             expected = p_data['currentStats']['expectedMomentums']
 
-            # Use a reward multiplier based on produced / expected momentums. Allow a tolerance of 2 momentums.
-            # TODO: Some better implementation could be used.
+            # Use a reward multiplier based on produced / expected momentums. Allow a tolerance of 2 momentum.
             if expected - produced > 2 and expected > 0:
-                momentum_reward_multiplier = produced / expected
+                reward_multiplier = produced / expected
             else:
-                momentum_reward_multiplier = 1
+                reward_multiplier = 1
 
             # Calculate yearly momentum rewards for Pillar based on currently produced momentums
             if p_data['rank'] < 30 and pillar_count_top_30 > 0:
@@ -577,7 +576,7 @@ class NomData(object):
 
                 # Calculate the Pillar's yearly momentum rewards based on current stats
                 yearly_momentum_rewards = self.__get_yearly_momentum_rewards_top_30(
-                ) * ((daily_expected_momentums_per_pillar * momentum_reward_multiplier) / self.total_expected_daily_momentums_top_30)
+                ) * ((daily_expected_momentums_per_pillar * reward_multiplier) / self.total_expected_daily_momentums_top_30)
 
             # Same for not top 30 Pillars
             elif pillar_count_not_top_30 > 0:
@@ -588,7 +587,7 @@ class NomData(object):
 
                 # Calculate the Pillar's yearly momentum rewards based on current stats
                 yearly_momentum_rewards = self.__get_yearly_momentum_rewards_not_top_30(
-                ) * ((daily_expected_momentums_per_pillar * momentum_reward_multiplier) / self.total_expected_daily_momentums_not_top_30)
+                ) * ((daily_expected_momentums_per_pillar * reward_multiplier) / self.total_expected_daily_momentums_not_top_30)
 
             else:
                 yearly_momentum_rewards = 0
@@ -597,6 +596,7 @@ class NomData(object):
             if self.total_delegated_znn > 0:
                 yearly_delegate_rewards = (
                     p_data['weight'] / self.DECIMALS / self.total_delegated_znn) * self.__get_current_yearly_znn_rewards() * self.ZNN_REWARD_SHARE_FOR_PILLAR_DELEGATES
+                yearly_delegate_rewards = yearly_delegate_rewards * reward_multiplier
             else:
                 yearly_delegate_rewards = 0
 
