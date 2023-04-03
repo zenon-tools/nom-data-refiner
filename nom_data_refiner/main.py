@@ -143,7 +143,7 @@ async def update():
         write_to_file_as_json(
             {'znn': {'timestamp': 0, 'usd': [], 'eur': [], 'gbp': [], 'cad': [], 'aud': []}, }, f'{DATA_STORE_DIR}/market_history_cache.json')
 
-    # Get coin prices. Set QSR price as 1/10th of ZNN until a market is open.
+    # Get coin prices.
     market = MarketWrapper()
     znn_price = await market.get_price_usd(coin='zenon')
     qsr_price = await market.get_price_usd(coin='quasar')
