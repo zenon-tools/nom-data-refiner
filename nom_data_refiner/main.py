@@ -145,8 +145,8 @@ async def update():
 
     # Get coin prices.
     market = MarketWrapper()
-    znn_price = await market.get_price_usd(coin='zenon')
-    qsr_price = await market.get_price_usd(coin='quasar')
+    znn_price = await market.get_price_usd(coin='zenon-2')
+    qsr_price = round(znn_price / 10, 2)
     bnb_price = await market.get_price_usd(coin='binancecoin')
 
     # If bad response use cached price data, else cache the new data.
