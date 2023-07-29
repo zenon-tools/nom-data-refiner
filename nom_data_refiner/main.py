@@ -4,7 +4,7 @@ import os
 import asyncio
 import math
 import datetime
-from pcs_pool import PcsPool
+from znn_eth_uniswap_pool import ZnnEthUniswapPool
 from utils.market_wrapper import MarketWrapper
 from nom_data import NomData
 
@@ -34,6 +34,14 @@ def write_nom_data_to_file(data, file_name):
             'weightedAmount': data.total_staked_znn['weighted_amount'],
             'amount':  data.total_staked_znn['amount']
         },
+        'znnEthLpInfo': {
+            'avgStakingLockupTimeInDays': data.avg_znn_eth_lp_lockup_time_in_days,
+            'participationRate':  data.znn_eth_lp_program_participation_rate,
+            'totalStaked': {
+                'weightedAmount': data.total_staked_znn_eth_lp['weighted_amount'],
+                'amount':  data.total_staked_znn_eth_lp['amount']
+            },
+        },
         'avgStakingLockupTimeInDays': data.avg_staking_lockup_time_in_days,
         'totalDelegatedZnn': data.total_delegated_znn,
         'sentinelCount': data.sentinel_count,
@@ -51,11 +59,10 @@ def write_nom_data_to_file(data, file_name):
         'yearlyQsrRewardPoolForStakers': data.yearly_qsr_reward_pool_for_stakers,
         'yearlyQsrRewardPoolForLps': data.yearly_qsr_reward_pool_for_lps,
         'yearlyQsrRewardPoolForSentinels': data.yearly_qsr_reward_pool_for_sentinels,
-        'yearlyQsrRewardPoolForLpProgram': data.yearly_qsr_reward_pool_for_lp_program,
         'yearlyZnnMomentumRewardPoolForPillarsTop30': data.yearly_znn_momentum_reward_pool_for_pillars_top_30,
         'yearlyZnnMomentumRewardPoolForPillarsNotTop30': data.yearly_znn_momentum_reward_pool_for_pillars_not_top_30,
         'yearlyZnnDelegateRewardPoolForPillars': data.yearly_znn_delegate_reward_pool_for_pillars,
-        'lpProgramParticipationRate': data.lp_program_participation_rate
+        'orbitalRewardMultiplier': data.orbital_multiplier
     }
 
     # Dump data to file
@@ -94,17 +101,17 @@ def write_pillar_data_to_file(data, file_name):
     write_to_file_as_json(json_data, file_name)
 
 
-def write_pcs_pool_data_to_file(data, file_name):
+def write_pool_data_to_file(data, file_name):
 
-    # Convert PCS data to JSON
+    # Convert data to JSON
     json_data = {
         'timestamp': math.trunc(time.time()),
-        'wZnnPriceUsd': data.wznn_price_usd,
-        'wBnbPriceUsd': data.wbnb_price_usd,
+        'baseTokenPriceUsd': data.wznn_price_usd,
+        'pairedTokenPriceUsd': data.weth_price_usd,
         'impermanentLossPast7d': data.impermanent_loss,
         'liquidityUsd': data.liquidity_usd,
         'yearlyTradingFeesUsd': data.yearly_trading_fees_usd,
-        'cakeLpTotalSupply': data.cake_lp_total_supply
+        'lpTokenTotalSupply': data.lp_token_total_supply
     }
 
     # Dump data to file
@@ -136,7 +143,7 @@ async def update():
     # Check if market cache exists. If not, create fallback data.
     if not os.path.exists(f'{DATA_STORE_DIR}/market_cache.json'):
         write_to_file_as_json(
-            {'timestamp': math.trunc(time.time()), 'znn_price_usd': 1.75, 'qsr_price_usd': 0.175, 'bnb_price_usd': 335}, f'{DATA_STORE_DIR}/market_cache.json')
+            {'timestamp': math.trunc(time.time()), 'znn_price_usd': 1.75, 'qsr_price_usd': 0.175, 'eth_price_usd': 1800}, f'{DATA_STORE_DIR}/market_cache.json')
 
     # Check if market history cache exists. If not, create it.
     if not os.path.exists(f'{DATA_STORE_DIR}/market_history_cache.json'):
@@ -147,17 +154,17 @@ async def update():
     market = MarketWrapper()
     znn_price = await market.get_price_usd(coin='zenon-2')
     qsr_price = round(znn_price / 10, 2)
-    bnb_price = await market.get_price_usd(coin='binancecoin')
+    eth_price = await market.get_price_usd(coin='ethereum')
 
     # If bad response use cached price data, else cache the new data.
-    if znn_price == 0 or bnb_price == 0:
+    if znn_price == 0 or eth_price == 0:
         market_cache = read_file(
             f'{DATA_STORE_DIR}/market_cache.json')
         znn_price = market_cache['znn_price_usd']
         qsr_price = market_cache['qsr_price_usd']
-        bnb_price = market_cache['bnb_price_usd']
+        eth_price = market_cache['eth_price_usd']
     else:
-        write_to_file_as_json({'timestamp': math.trunc(time.time()), 'znn_price_usd': znn_price, 'qsr_price_usd': qsr_price, 'bnb_price_usd': bnb_price},
+        write_to_file_as_json({'timestamp': math.trunc(time.time()), 'znn_price_usd': znn_price, 'qsr_price_usd': qsr_price, 'eth_price_usd': eth_price},
                               f'{DATA_STORE_DIR}/market_cache.json')
 
     # Update price history data
@@ -167,11 +174,11 @@ async def update():
 
     if market_history_cache['znn']['timestamp'] + refresh_interval_secs < math.trunc(time.time()):
         print('Updating market history cache')
-        znn_usd = await market.get_price_history(coin='zenon', currency='usd')
-        znn_eur = await market.get_price_history(coin='zenon', currency='eur')
-        znn_gbp = await market.get_price_history(coin='zenon', currency='gbp')
-        znn_cad = await market.get_price_history(coin='zenon', currency='cad')
-        znn_aud = await market.get_price_history(coin='zenon', currency='aud')
+        znn_usd = await market.get_price_history(coin='zenon-2', currency='usd')
+        znn_eur = await market.get_price_history(coin='zenon-2', currency='eur')
+        znn_gbp = await market.get_price_history(coin='zenon-2', currency='gbp')
+        znn_cad = await market.get_price_history(coin='zenon-2', currency='cad')
+        znn_aud = await market.get_price_history(coin='zenon-2', currency='aud')
         if len(znn_usd) > 0 and len(znn_eur) > 0 and len(znn_gbp) > 0 and len(znn_cad) > 0 and len(znn_aud) > 0:
             write_to_file_as_json({'znn': {'timestamp': math.trunc(time.time()), 'usd': history_list_to_map(znn_usd),
                                            'eur': history_list_to_map(znn_eur), 'gbp': history_list_to_map(znn_gbp),
@@ -180,9 +187,9 @@ async def update():
         else:
             print('Unable to update market history cache')
 
-    # Update PS data
-    pcs_pool = PcsPool()
-    await pcs_pool.update(DATA_STORE_DIR, znn_price, bnb_price, cfg['bsc_reference_address_cake_lp_balance'], cfg['bitquery_api_key'], cfg['bsc_scan_api_key'])
+    # Update pool data
+    znn_eth_uniswap_pool = ZnnEthUniswapPool()
+    await znn_eth_uniswap_pool.update(DATA_STORE_DIR, znn_price, eth_price, cfg['bitquery_api_key'], cfg['ether_scan_api_key'])
 
     # Update NoM data
     nom_data = NomData()
@@ -191,11 +198,11 @@ async def update():
                           reference_lp_address=cfg['reference_lp_address'],
                           znn_price_usd=znn_price,
                           qsr_price_usd=qsr_price,
-                          pcs_pool=pcs_pool)
+                          znn_eth_uniswap_pool=znn_eth_uniswap_pool)
 
-    # Write PCS data to file
-    write_pcs_pool_data_to_file(
-        pcs_pool, f'{DATA_STORE_DIR}/pcs_pool_data.json')
+    # Write pool data to file
+    write_pool_data_to_file(
+        znn_eth_uniswap_pool, f'{DATA_STORE_DIR}/znn_eth_pool_data.json')
 
     # Write NoM data to file
     write_nom_data_to_file(

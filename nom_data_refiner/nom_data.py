@@ -64,11 +64,14 @@ class NomData(object):
     PILLAR_COLLATERAL_ZNN = 15000
     PILLAR_COLLATERAL_QSR = 150000
     DECIMALS = 100000000
+    LP_TOKEN_DECIMALS = 1000000000000000000
     MOMENTUMS_PER_HOUR = 360
     ZNN_ZTS_ID = 'zts1znnxxxxxxxxxxxxx9z4ulx'
     QSR_ZTS_ID = 'zts1qsrxxxxxxxxxxxxxmrhjll'
+    ZNN_ETH_LP_ZTS_ID = 'zts17d6yr02kh0r9qr566p7tg6'
     TOTAL_MOMENTUMS_PER_DAY = 8640
     STAKING_CONTRACT_ADDRESS = 'z1qxemdeddedxstakexxxxxxxxxxxxxxxxjv8v62'
+    LIQUIDITY_CONTRACT_ADDRESS = 'z1qxemdeddedxlyquydytyxxxxxxxxxxxxflaaae'
 
     # Daily reward emissions
     DAILY_ZNN_REWARDS_BY_MONTH = [
@@ -79,19 +82,22 @@ class NomData(object):
         5000
     ]
 
-    # Pancakeswap pool data
-    pcs_pool = None
+    # Uniswap pool data
+    znn_eth_uniswap_pool = None
 
     # A reference staking address is used to calculate the network's total weighted stake.
     # It's assumed that the reference address is staking with a lockup period of 12 months.
     reference_staking_address = ''
     reference_staking_reward_previous_epoch = 0
-    reference_staking_amount = 0
     reference_weighted_staking_amount = 0
     avg_staking_lockup_time_in_days = 0
 
-    reference_lp_address = ''
-    lp_program_participation_rate = 0
+    reference_znn_eth_lp_address = ''
+    reference_znn_eth_lp_reward_previous_epoch = 0
+    reference_weighted_znn_eth_lp_amount = 0
+    avg_znn_eth_lp_lockup_time_in_days = 0
+    znn_eth_lp_program_participation_rate = 0
+    orbital_multiplier = 1
 
     momentum_height = 0
     node_version = ''
@@ -101,6 +107,10 @@ class NomData(object):
     total_expected_daily_momentums_not_top_30 = 0
 
     total_staked_znn = {
+        'amount': 0,
+        'weighted_amount': 0
+    }
+    total_staked_znn_eth_lp = {
         'amount': 0,
         'weighted_amount': 0
     }
@@ -140,18 +150,17 @@ class NomData(object):
     yearly_qsr_reward_pool_for_stakers = 0
     yearly_qsr_reward_pool_for_lps = 0
     yearly_qsr_reward_pool_for_sentinels = 0
-    yearly_qsr_reward_pool_for_lp_program = 0
 
-    yearly_usd_reward_pool_for_lp_program = 0
-    daily_qsr_reward_pool_for_lp_program = 0
+    yearly_znn_bonus_reward_pool_for_lps = 0
+    yearly_qsr_bonus_reward_pool_for_lps = 0
 
-    async def update(self, node_url, reference_staking_address, reference_lp_address, znn_price_usd, qsr_price_usd, pcs_pool):
+    async def update(self, node_url, reference_staking_address, reference_lp_address, znn_price_usd, qsr_price_usd, znn_eth_uniswap_pool):
         self.node_url = node_url
         self.znn_price_usd = znn_price_usd
         self.qsr_price_usd = qsr_price_usd
         self.reference_staking_address = reference_staking_address
-        self.reference_lp_address = reference_lp_address
-        self.pcs_pool = pcs_pool
+        self.reference_znn_eth_lp_address = reference_lp_address
+        self.znn_eth_uniswap_pool = znn_eth_uniswap_pool
 
         # Update data from the node
         await asyncio.gather(
@@ -160,9 +169,12 @@ class NomData(object):
             self.__update_znn_supply(),
             self.__update_qsr_supply(),
             self.__update_total_staked_znn(),
+            self.__update_total_staked_znn_eth_lp(),
             self.__update_reference_staking_data(),
+            self.__update_reference_znn_eth_lp_staking_data(),
             self.__update_sentinel_data(),
-            self.__update_pillar_data())
+            self.__update_pillar_data(),
+            self.__update_bonus_orbital_rewards())
 
         # Update expected momentums for top 30 Pillars and for non top 30 Pillars
         self.__update_total_expected_momentums_for_pillars()
@@ -173,10 +185,13 @@ class NomData(object):
         # Update staking data
         self.__update_staking_data()
 
-        # Update LP program participation rate
-        await self.__update_lp_program_participation_rate()
+        # Update LP staking data
+        self.__update_znn_eth_lp_staking_data()
 
-        # Update APRs (LP not implemented yet)
+        # Update ZNN ETH LP program participation rate
+        await self.__update_znn_eth_lp_program_participation_rate()
+
+        # Update APRs
         self.__update_staking_apr()
         self.__update_lp_apr()
         self.__update_sentinel_apr()
@@ -238,7 +253,7 @@ class NomData(object):
             self.ZNN_ZTS_ID
         ]))
         try:
-            self.znn_supply = r['result']['totalSupply']
+            self.znn_supply = int(r['result']['totalSupply'])
         except KeyError:
             print('Error: __update_znn_supply')
 
@@ -247,7 +262,7 @@ class NomData(object):
             self.QSR_ZTS_ID
         ]))
         try:
-            self.qsr_supply = r['result']['totalSupply']
+            self.qsr_supply = int(r['result']['totalSupply'])
         except KeyError:
             print('Error: __update_qsr_supply')
 
@@ -256,9 +271,20 @@ class NomData(object):
             self.STAKING_CONTRACT_ADDRESS
         ]))
         try:
-            self.total_staked_znn['amount'] = r['result']['balanceInfoMap'][self.ZNN_ZTS_ID]['balance'] / self.DECIMALS
+            self.total_staked_znn['amount'] = int(
+                r['result']['balanceInfoMap'][self.ZNN_ZTS_ID]['balance']) / self.DECIMALS
         except KeyError:
             print('Error: __update_total_staked_znn')
+
+    async def __update_total_staked_znn_eth_lp(self):
+        r = await HttpWrapper.post(self.node_url, self.__create_request('ledger.getAccountInfoByAddress', [
+            self.LIQUIDITY_CONTRACT_ADDRESS
+        ]))
+        try:
+            self.total_staked_znn_eth_lp['amount'] = int(
+                r['result']['balanceInfoMap'][self.ZNN_ETH_LP_ZTS_ID]['balance']) / self.LP_TOKEN_DECIMALS
+        except KeyError:
+            print('Error: __update_total_staked_znn_eth_lp')
 
     async def __update_reference_staking_data(self):
         if len(self.reference_staking_address) == 0:
@@ -269,8 +295,8 @@ class NomData(object):
         ]))
         try:
             if r['result']['count'] > 0:
-                self.reference_staking_reward_previous_epoch = r[
-                    'result']['list'][0]['qsrAmount'] / self.DECIMALS
+                self.reference_staking_reward_previous_epoch = int(r[
+                    'result']['list'][0]['qsrAmount']) / self.DECIMALS
         except KeyError:
             print('Error: __update_reference_staking_data')
 
@@ -279,11 +305,41 @@ class NomData(object):
         ]))
         try:
             if r['result']['count'] > 0:
-                self.reference_staking_amount = r['result']['list'][0]['amount'] / self.DECIMALS
-                self.reference_weighted_staking_amount = r['result'][
-                    'list'][0]['weightedAmount'] / self.DECIMALS
+                self.reference_weighted_staking_amount = int(r['result'][
+                    'list'][0]['weightedAmount']) / self.DECIMALS
         except KeyError:
             print('Error: __update_reference_staking_data')
+
+    async def __update_reference_znn_eth_lp_staking_data(self):
+        if len(self.reference_znn_eth_lp_address) == 0:
+            return
+
+        r = await HttpWrapper.post(self.node_url, self.__create_request('embedded.liquidity.getFrontierRewardByPage', [
+            self.reference_znn_eth_lp_address, 0, 1
+        ]))
+        try:
+            if r['result']['count'] > 0:
+                self.reference_znn_eth_lp_reward_previous_epoch = int(r[
+                    'result']['list'][0]['znnAmount']) / self.DECIMALS
+        except KeyError:
+            print('Error: __update_reference_lp_staking_data')
+
+        r = await HttpWrapper.post(self.node_url, self.__create_request('embedded.liquidity.getLiquidityStakeEntriesByAddress', [
+            self.reference_znn_eth_lp_address, 0, 1
+        ]))
+        try:
+            if r['result']['count'] > 0:
+                self.reference_weighted_znn_eth_lp_amount = int(r['result'][
+                    'list'][0]['weightedAmount']) / self.LP_TOKEN_DECIMALS
+        except KeyError:
+            print('Error: __update_reference_lp_staking_data')
+
+    async def __update_bonus_orbital_rewards(self):
+        r = await HttpWrapper.post(self.node_url, self.__create_request('embedded.liquidity.getLiquidityInfo'))
+        self.yearly_znn_bonus_reward_pool_for_lps = (int(r['result']['znnReward']) /
+                                                     self.DECIMALS) * self.DAYS_PER_YEAR
+        self.yearly_qsr_bonus_reward_pool_for_lps = (int(r['result']['qsrReward']) /
+                                                     self.DECIMALS) * self.DAYS_PER_YEAR
 
     async def __update_sentinel_data(self):
         r = await HttpWrapper.post(self.node_url, self.__create_request('embedded.sentinel.getAllActive', [0, 1000]))
@@ -326,13 +382,13 @@ class NomData(object):
 
                 # Add to total delegated
                 self.total_delegated_znn = self.total_delegated_znn + \
-                    p_data['weight'] / self.DECIMALS
+                    int(p_data['weight']) / self.DECIMALS
                 if p_data['rank'] < 30:
                     self.total_delegated_znn_top_30 = self.total_delegated_znn_top_30 + \
-                        p_data['weight'] / self.DECIMALS
+                        int(p_data['weight']) / self.DECIMALS
                 else:
                     self.total_delegated_znn_not_top_30 = self.total_delegated_znn_not_top_30 + \
-                        p_data['weight'] / self.DECIMALS
+                        int(p_data['weight']) / self.DECIMALS
 
                 # Add to total reward share rates (used to calculate averages)
                 if p_data['rank'] < 30:
@@ -393,6 +449,28 @@ class NomData(object):
             self.avg_staking_lockup_time_in_days = round(
                 (((self.total_staked_znn['weighted_amount'] * 10) / self.total_staked_znn['amount']) - 9) * self.DAYS_PER_MONTH)
 
+    def __update_znn_eth_lp_staking_data(self):
+        # Calculations based on https://github.com/zenon-network/go-zenon/blob/a892f3cdef00ab0dbefdf90a4d62d081dc53daf3/vm/embedded/implementation/liquidity.go
+
+        rewards_per_epoch = (self.__get_current_yearly_znn_rewards(
+        ) * self.ZNN_REWARD_SHARE_FOR_LPS) / (self.DAYS_PER_YEAR * self.EPOCH_LENGTH_IN_DAYS) * self.orbital_multiplier
+
+        # If no reference staking address is provided use a guesstimation to calculate total weighted stake.
+        if len(self.reference_znn_eth_lp_address) == 0 or self.reference_znn_eth_lp_reward_previous_epoch == 0:
+            estimated_avg_staking_lockup_time_in_months = 3
+            self.total_staked_znn_eth_lp['weighted_amount'] = self.total_staked_znn_eth_lp['amount'] * \
+                estimated_avg_staking_lockup_time_in_months
+
+            self.avg_staking_lockup_time_in_days = estimated_avg_staking_lockup_time_in_months * \
+                self.DAYS_PER_MONTH
+
+        else:
+            self.total_staked_znn_eth_lp['weighted_amount'] = (
+                rewards_per_epoch * self.reference_weighted_znn_eth_lp_amount) / self.reference_znn_eth_lp_reward_previous_epoch
+
+            self.avg_znn_eth_lp_lockup_time_in_days = round(
+                (self.total_staked_znn_eth_lp['weighted_amount'] / self.total_staked_znn_eth_lp['amount']) * self.DAYS_PER_MONTH)
+
     def __update_total_expected_momentums_for_pillars(self):
         # Group B size (includes half of the top 30 pillars and all non top 30 pillars)
         group_b_size = self.pillar_count - 15
@@ -410,8 +488,13 @@ class NomData(object):
         total_yearly_znn_rewards = self.__get_current_yearly_znn_rewards()
         total_yearly_qsr_rewards = self.__get_current_yearly_qsr_rewards()
 
-        self.yearly_znn_reward_pool_for_lps = total_yearly_znn_rewards * \
-            self.ZNN_REWARD_SHARE_FOR_LPS
+        self.yearly_znn_reward_pool_for_lps = (total_yearly_znn_rewards *
+                                               self.ZNN_REWARD_SHARE_FOR_LPS)
+        self.orbital_multiplier = (self.yearly_znn_reward_pool_for_lps +
+                                   self.yearly_znn_bonus_reward_pool_for_lps) / self.yearly_znn_reward_pool_for_lps
+        self.yearly_znn_reward_pool_for_lps = self.yearly_znn_reward_pool_for_lps + \
+            self.yearly_znn_bonus_reward_pool_for_lps
+
         self.yearly_znn_reward_pool_for_sentinels = total_yearly_znn_rewards * \
             self.ZNN_REWARD_SHARE_FOR_SENTINELS
 
@@ -420,48 +503,18 @@ class NomData(object):
         self.yearly_znn_delegate_reward_pool_for_pillars = total_yearly_znn_rewards * \
             self.ZNN_REWARD_SHARE_FOR_PILLAR_DELEGATES
 
+        self.yearly_qsr_reward_pool_for_lps = total_yearly_qsr_rewards * \
+            self.QSR_REWARD_SHARE_FOR_LPS + self.yearly_qsr_bonus_reward_pool_for_lps
         self.yearly_qsr_reward_pool_for_stakers = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_STAKERS
-        self.yearly_qsr_reward_pool_for_lps = total_yearly_qsr_rewards * \
-            self.QSR_REWARD_SHARE_FOR_LPS
         self.yearly_qsr_reward_pool_for_sentinels = total_yearly_qsr_rewards * \
             self.QSR_REWARD_SHARE_FOR_SENTINELS
 
-        # LP reward program
-        reward_multiplier = 1
-        if self.pcs_pool.wbnb_reserve >= 3000 and self.pcs_pool.wbnb_reserve < 4500:
-            reward_multiplier = 3
-        elif self.pcs_pool.wbnb_reserve >= 2000 and self.pcs_pool.wbnb_reserve < 10000:
-            reward_multiplier = math.floor(self.pcs_pool.wbnb_reserve / 1000)
-        elif self.pcs_pool.wbnb_reserve >= 10000:
-            reward_multiplier = 10
-
-        self.daily_qsr_reward_pool_for_lp_program = reward_multiplier * 1800
-
-        self.yearly_usd_reward_pool_for_lp_program = self.daily_qsr_reward_pool_for_lp_program * self.qsr_price_usd * self.DAYS_PER_YEAR
-        self.yearly_qsr_reward_pool_for_lp_program = self.daily_qsr_reward_pool_for_lp_program * self.DAYS_PER_YEAR
-
-
-    async def __update_lp_program_participation_rate(self):
-        lp_program_address = 'z1qqw8f3qxx9zg92xgckqdpfws3dw07d26afsj74'
-        qsr_standard = 'zts1qsrxxxxxxxxxxxxxmrhjll'
-        reward = 0
-        r = await HttpWrapper.post(self.node_url, self.__create_request('ledger.getUnreceivedBlocksByAddress', [self.reference_lp_address, 0, 1]))
-        if len(r['result']['list']) > 0 and r['result']['list'][0]['tokenStandard'] == qsr_standard and r['result']['list'][0]['address'] == lp_program_address:
-            reward = r['result']['list'][0]['amount'] / self.DECIMALS
-
-        if reward == 0:
-            r = await HttpWrapper.post(self.node_url, self.__create_request('ledger.getAccountBlocksByPage', [self.reference_lp_address, 0, 10]))
-            if len(r['result']['list']) > 0:
-                for block in r['result']['list']:
-                    if (len(block['pairedAccountBlock']) > 0) and block['pairedAccountBlock']['tokenStandard'] == qsr_standard and block['pairedAccountBlock']['address'] == lp_program_address:
-                        reward = block['pairedAccountBlock']['amount'] / self.DECIMALS
-                        break            
-        
-        reward_share = reward / self.daily_qsr_reward_pool_for_lp_program
-
-        self.lp_program_participation_rate = self.pcs_pool.reference_address_reward_share / reward_share if reward_share > 0 else 1
-        print('LP participation rate: ' + str(self.lp_program_participation_rate))
+    async def __update_znn_eth_lp_program_participation_rate(self):
+        self.znn_eth_lp_program_participation_rate = self.total_staked_znn_eth_lp[
+            'amount'] / self.znn_eth_uniswap_pool.lp_token_total_supply
+        print('LP participation rate: ' +
+              str(self.znn_eth_lp_program_participation_rate))
 
     def __update_staking_apr(self):
         reward_pool_in_usd = self.yearly_qsr_reward_pool_for_stakers * self.qsr_price_usd
@@ -482,13 +535,15 @@ class NomData(object):
             sharing_pillars_count if sharing_pillars_count > 0 else 0
 
     def __update_lp_apr(self):
-        # total_rewards_usd = self.yearly_znn_reward_pool_for_lps * self.znn_price_usd + \
-        #     self.yearly_qsr_reward_pool_for_lps * self.qsr_price_usd
-        # total_rewards_usd = total_rewards_usd + self.pcs_pool.yearly_trading_fees_usd
+        total_rewards_usd = self.yearly_znn_reward_pool_for_lps * self.znn_price_usd + \
+            self.yearly_qsr_reward_pool_for_lps * self.qsr_price_usd
+        total_rewards_usd = total_rewards_usd + \
+            self.znn_eth_uniswap_pool.yearly_trading_fees_usd * \
+            self.znn_eth_lp_program_participation_rate
 
-        if self.pcs_pool.liquidity_usd > 0:
-            self.lp_apr = (self.yearly_usd_reward_pool_for_lp_program + self.pcs_pool.yearly_trading_fees_usd * self.lp_program_participation_rate) / \
-                (self.pcs_pool.liquidity_usd * self.lp_program_participation_rate) * 100
+        if self.znn_eth_uniswap_pool.liquidity_usd > 0:
+            self.lp_apr = total_rewards_usd / (self.znn_eth_uniswap_pool.liquidity_usd *
+                                               self.znn_eth_lp_program_participation_rate) * 100
         else:
             self.lp_apr = 0
 
@@ -595,7 +650,7 @@ class NomData(object):
             # Calculate yearly delegate rewards for Pillar based on current weight
             if self.total_delegated_znn > 0:
                 yearly_delegate_rewards = (
-                    p_data['weight'] / self.DECIMALS / self.total_delegated_znn) * self.__get_current_yearly_znn_rewards() * self.ZNN_REWARD_SHARE_FOR_PILLAR_DELEGATES
+                    int(p_data['weight']) / self.DECIMALS / self.total_delegated_znn) * self.__get_current_yearly_znn_rewards() * self.ZNN_REWARD_SHARE_FOR_PILLAR_DELEGATES
                 yearly_delegate_rewards = yearly_delegate_rewards * reward_multiplier
             else:
                 yearly_delegate_rewards = 0
@@ -603,7 +658,7 @@ class NomData(object):
             # Get Pillar stats
             momentum_reward_sharing = p_data['giveMomentumRewardPercentage'] / 100
             delegate_reward_sharing = p_data['giveDelegateRewardPercentage'] / 100
-            delegated_znn = p_data['weight'] / self.DECIMALS
+            delegated_znn = int(p_data['weight']) / self.DECIMALS
 
             # Calculate the Pillar's APR
             p_apr = self.__get_single_pillar_apr(
@@ -635,7 +690,7 @@ class NomData(object):
                     p_data['giveDelegateRewardPercentage'],
                     p_data['currentStats']['producedMomentums'],
                     p_data['currentStats']['expectedMomentums'],
-                    p_data['weight'],
+                    int(p_data['weight']),
                     epoch_momentum_rewards,
                     epoch_delegate_rewards,
                     p_apr * 100,
